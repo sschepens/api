@@ -1,0 +1,22 @@
+networking/v1alpha3/destination_rule.proto
+  s_28d4050b8c4779::t_5365bfe4a63696 418-425
+  s_28d4050b8c4779::t_c4da56589bc6b1 1185-1193,1199,1205-1281,1285-1349
+  s_28d4050b8c4779::t_bdf808c078082d 1194-1198,1200-1204
+  s_28d4050b8c4779::t_304c637eb9c679 1351-1358
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "ade72fdaddc53b054be8a6bbb3b6c8b5f78a9e5e",
+  "prompts": {},
+  "sessions": {
+    "s_28d4050b8c4779": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "20df4437-5e78-4745-a23f-2309200f4efd",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "sschepens <sebastian.schepens@mercadolibre.com>"
+    }
+  }
+}
