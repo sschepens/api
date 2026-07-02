@@ -1,0 +1,40 @@
+mesh/v1alpha1/config.proto
+  s_fe172cc4ac8039::t_ba9df87feeb18a 355-357
+  s_fe172cc4ac8039::t_c092a6ce1fbdbf 354
+networking/v1alpha3/destination_rule.proto
+  s_6a0e3a545ab482::t_981974a177ccdd 1196
+  s_28d4050b8c4779::t_c4da56589bc6b1 1177,1181,1214,1260,1284,1357
+  s_28d4050b8c4779::t_304c637eb9c679 1363-1364
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.8",
+  "base_commit_sha": "d44d0b2f87f218996835a9ccd15330d70f6b6bd4",
+  "prompts": {},
+  "sessions": {
+    "s_28d4050b8c4779": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "20df4437-5e78-4745-a23f-2309200f4efd",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "sschepens <sebastian.schepens@mercadolibre.com>"
+    },
+    "s_6a0e3a545ab482": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f9eda0de-9d05-4fb5-9cf4-b03820cc0022",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "sschepens <sebastian.schepens@mercadolibre.com>"
+    },
+    "s_fe172cc4ac8039": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b43448a4-d2d5-47cb-9934-65a79fcbf74e",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "sschepens <sebastian.schepens@mercadolibre.com>"
+    }
+  }
+}
