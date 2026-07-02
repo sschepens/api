@@ -1,0 +1,20 @@
+mesh/v1alpha1/config.proto
+  s_fe172cc4ac8039::t_ba9df87feeb18a 355-357
+  s_fe172cc4ac8039::t_c092a6ce1fbdbf 354
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.8",
+  "base_commit_sha": "5b49b80f6e5f01ddc97b16a0ffca91b369b35eea",
+  "prompts": {},
+  "sessions": {
+    "s_fe172cc4ac8039": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b43448a4-d2d5-47cb-9934-65a79fcbf74e",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "sschepens <sebastian.schepens@mercadolibre.com>"
+    }
+  }
+}
