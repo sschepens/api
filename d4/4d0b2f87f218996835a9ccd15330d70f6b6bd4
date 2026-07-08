@@ -1,14 +1,14 @@
 mesh/v1alpha1/config.proto
-  s_fe172cc4ac8039::t_ba9df87feeb18a 355-357
   s_fe172cc4ac8039::t_c092a6ce1fbdbf 354
+  s_fe172cc4ac8039::t_ba9df87feeb18a 355-357
 networking/v1alpha3/destination_rule.proto
+  s_28d4050b8c4779::t_c4da56589bc6b1 1177,1181,1214,1260,1287,1360
   s_6a0e3a545ab482::t_981974a177ccdd 1196
-  s_28d4050b8c4779::t_c4da56589bc6b1 1177,1181,1214,1260,1284,1357
-  s_28d4050b8c4779::t_304c637eb9c679 1363-1364
+  s_28d4050b8c4779::t_304c637eb9c679 1366-1367
 ---
 {
   "schema_version": "authorship/3.0.0",
-  "git_ai_version": "1.6.8",
+  "git_ai_version": "1.5.6",
   "base_commit_sha": "d44d0b2f87f218996835a9ccd15330d70f6b6bd4",
   "prompts": {},
   "sessions": {
