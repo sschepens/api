@@ -384,7 +384,7 @@ func (x ClientTLSSettings_TLSmode) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ClientTLSSettings_TLSmode.Descriptor instead.
 func (ClientTLSSettings_TLSmode) EnumDescriptor() ([]byte, []int) {
-	return file_networking_v1alpha3_destination_rule_proto_rawDescGZIP(), []int{7, 0}
+	return file_networking_v1alpha3_destination_rule_proto_rawDescGZIP(), []int{10, 0}
 }
 
 // DestinationRule defines policies that apply to traffic intended for a service
@@ -452,6 +452,7 @@ type DestinationRule struct {
 	// the destination rule is declared in. Similarly, the value "*" is reserved and
 	// defines an export to all namespaces.
 	ExportTo []string `protobuf:"bytes,4,rep,name=export_to,json=exportTo,proto3" json:"export_to,omitempty"`
+	//
 	// Criteria used to select the specific set of pods/VMs on which this
 	// `DestinationRule` configuration should be applied. If specified, the `DestinationRule`
 	// configuration will be applied only to the workload instances matching the workload selector
@@ -556,9 +557,16 @@ type TrafficPolicy struct {
 	// The upstream PROXY protocol settings.
 	ProxyProtocol *TrafficPolicy_ProxyProtocol `protobuf:"bytes,7,opt,name=proxy_protocol,json=proxyProtocol,proto3" json:"proxy_protocol,omitempty"`
 	// Specifies a limit on concurrent retries in relation to the number of active requests.
-	RetryBudget   *TrafficPolicy_RetryBudget `protobuf:"bytes,8,opt,name=retry_budget,json=retryBudget,proto3" json:"retry_budget,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	RetryBudget *TrafficPolicy_RetryBudget `protobuf:"bytes,8,opt,name=retry_budget,json=retryBudget,proto3" json:"retry_budget,omitempty"`
+	// Admission control based on the observed success rate of the upstream
+	// service. When the success rate drops below the configured threshold, the
+	// caller's sidecar probabilistically rejects requests locally (a local `503`,
+	// before network dispatch) to protect a degrading upstream. State is kept
+	// independently per upstream cluster. This is the client-side sibling of
+	// `outlierDetection`.
+	AdmissionControl *AdmissionControlPolicy `protobuf:"bytes,9,opt,name=admission_control,json=admissionControl,proto3" json:"admission_control,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *TrafficPolicy) Reset() {
@@ -643,6 +651,13 @@ func (x *TrafficPolicy) GetProxyProtocol() *TrafficPolicy_ProxyProtocol {
 func (x *TrafficPolicy) GetRetryBudget() *TrafficPolicy_RetryBudget {
 	if x != nil {
 		return x.RetryBudget
+	}
+	return nil
+}
+
+func (x *TrafficPolicy) GetAdmissionControl() *AdmissionControlPolicy {
+	if x != nil {
+		return x.AdmissionControl
 	}
 	return nil
 }
@@ -1390,6 +1405,277 @@ func (x *OutlierDetection) GetFailurePercentageThreshold() *wrappers.UInt32Value
 	return nil
 }
 
+// AdmissionControlPolicy configures success-rate-based admission control for
+// requests to an upstream service. It is a client-side, per-upstream resilience
+// control that runs in the caller's sidecar after upstream-cluster selection.
+// When the observed success rate of the selected cluster drops below a
+// threshold, the sidecar probabilistically rejects requests locally with a
+// `503` before dispatching them over the network, giving a degrading upstream
+// room to recover. State is tracked independently per upstream cluster.
+//
+// This is the client-side sibling of `OutlierDetection`: where outlier
+// detection ejects individual unhealthy endpoints from the load balancing pool,
+// admission control throttles the volume of requests the caller sends when
+// the upstream as a whole is failing.
+//
+// ```yaml
+// apiVersion: networking.istio.io/v1
+// kind: DestinationRule
+// metadata:
+//
+//	name: checkout-to-payments
+//
+// spec:
+//
+//	host: payments.payments.svc.cluster.local
+//	trafficPolicy:
+//	  admissionControl:
+//	    successRate:
+//	      samplingWindow: 30s
+//	      threshold: 95
+//	      aggression: 1
+//	      minimumAttemptRate: 10
+//	      maximumRejectionPercent: 80
+//
+// ```
+type AdmissionControlPolicy struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The admission control strategy. Exactly one strategy may be configured.
+	//
+	// Types that are valid to be assigned to Strategy:
+	//
+	//	*AdmissionControlPolicy_SuccessRate
+	Strategy      isAdmissionControlPolicy_Strategy `protobuf_oneof:"strategy"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdmissionControlPolicy) Reset() {
+	*x = AdmissionControlPolicy{}
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdmissionControlPolicy) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdmissionControlPolicy) ProtoMessage() {}
+
+func (x *AdmissionControlPolicy) ProtoReflect() protoreflect.Message {
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdmissionControlPolicy.ProtoReflect.Descriptor instead.
+func (*AdmissionControlPolicy) Descriptor() ([]byte, []int) {
+	return file_networking_v1alpha3_destination_rule_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *AdmissionControlPolicy) GetStrategy() isAdmissionControlPolicy_Strategy {
+	if x != nil {
+		return x.Strategy
+	}
+	return nil
+}
+
+func (x *AdmissionControlPolicy) GetSuccessRate() *SuccessRate {
+	if x != nil {
+		if x, ok := x.Strategy.(*AdmissionControlPolicy_SuccessRate); ok {
+			return x.SuccessRate
+		}
+	}
+	return nil
+}
+
+type isAdmissionControlPolicy_Strategy interface {
+	isAdmissionControlPolicy_Strategy()
+}
+
+type AdmissionControlPolicy_SuccessRate struct {
+	// Shed load based on the observed success rate of the upstream service.
+	SuccessRate *SuccessRate `protobuf:"bytes,1,opt,name=success_rate,json=successRate,proto3,oneof"`
+}
+
+func (*AdmissionControlPolicy_SuccessRate) isAdmissionControlPolicy_Strategy() {}
+
+// SuccessRate configures admission control driven by the success rate observed
+// over a sliding time window. Each upstream attempt is classified as a success
+// or a failure according to `success_criteria` (Envoy's HTTP/gRPC defaults are
+// used when it is omitted).
+type SuccessRate struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The sliding time window over which the success rate is calculated. The
+	// window is rounded to the nearest second. Defaults to 30s.
+	//
+	// +protoc-gen-crd:duration-validation:none
+	SamplingWindow *duration.Duration `protobuf:"bytes,1,opt,name=sampling_window,json=samplingWindow,proto3" json:"sampling_window,omitempty"`
+	// The success rate, as a percentage, at or below which requests begin to be
+	// rejected. Success rates above this threshold result in no shedding. Must be
+	// in the range [0, 100]. Leave unset to use Envoy's default of 95.
+	Threshold *wrappers.DoubleValue `protobuf:"bytes,2,opt,name=threshold,proto3" json:"threshold,omitempty"`
+	// Controls how aggressively requests are shed as the success rate drops below
+	// `threshold`. A value of 1 produces a linear increase in rejection
+	// probability as the success rate falls; higher values shed more aggressively.
+	// Values below 1 are treated as 1. Leave unset to use Envoy's default of 1.
+	Aggression *wrappers.DoubleValue `protobuf:"bytes,3,opt,name=aggression,proto3" json:"aggression,omitempty"`
+	// The minimum average request rate (requests per second) over the sampling
+	// window required before any shedding occurs. Below this rate nothing is shed,
+	// even if the success rate is below `threshold`. This avoids over-reacting
+	// to low-traffic noise. Leave unset to use Envoy's default of 0 (no minimum).
+	MinimumAttemptRate *wrappers.UInt32Value `protobuf:"bytes,4,opt,name=minimum_attempt_rate,json=minimumAttemptRate,proto3" json:"minimum_attempt_rate,omitempty"`
+	// The maximum percentage of requests that may be shed, even as the success
+	// rate keeps falling. Caps the rejection probability. Must be in the range
+	// [0, 100]. Leave unset to use Envoy's default of 80.
+	MaximumRejectionPercent *wrappers.DoubleValue `protobuf:"bytes,5,opt,name=maximum_rejection_percent,json=maximumRejectionPercent,proto3" json:"maximum_rejection_percent,omitempty"`
+	// Criteria that classify an upstream response as a success for the purpose of
+	// the success-rate signal. If omitted, Envoy's protocol defaults are used
+	// (HTTP: statuses below 500 are successful; gRPC: the standard success codes).
+	// HTTP and gRPC criteria are independent; configuring one leaves the other at
+	// its default.
+	SuccessCriteria *SuccessCriteria `protobuf:"bytes,6,opt,name=success_criteria,json=successCriteria,proto3" json:"success_criteria,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *SuccessRate) Reset() {
+	*x = SuccessRate{}
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SuccessRate) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SuccessRate) ProtoMessage() {}
+
+func (x *SuccessRate) ProtoReflect() protoreflect.Message {
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SuccessRate.ProtoReflect.Descriptor instead.
+func (*SuccessRate) Descriptor() ([]byte, []int) {
+	return file_networking_v1alpha3_destination_rule_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *SuccessRate) GetSamplingWindow() *duration.Duration {
+	if x != nil {
+		return x.SamplingWindow
+	}
+	return nil
+}
+
+func (x *SuccessRate) GetThreshold() *wrappers.DoubleValue {
+	if x != nil {
+		return x.Threshold
+	}
+	return nil
+}
+
+func (x *SuccessRate) GetAggression() *wrappers.DoubleValue {
+	if x != nil {
+		return x.Aggression
+	}
+	return nil
+}
+
+func (x *SuccessRate) GetMinimumAttemptRate() *wrappers.UInt32Value {
+	if x != nil {
+		return x.MinimumAttemptRate
+	}
+	return nil
+}
+
+func (x *SuccessRate) GetMaximumRejectionPercent() *wrappers.DoubleValue {
+	if x != nil {
+		return x.MaximumRejectionPercent
+	}
+	return nil
+}
+
+func (x *SuccessRate) GetSuccessCriteria() *SuccessCriteria {
+	if x != nil {
+		return x.SuccessCriteria
+	}
+	return nil
+}
+
+// SuccessCriteria classifies which upstream responses count as a success when
+// computing the observed success rate. HTTP and gRPC are configured
+// independently, which matters for clusters that serve both protocols or whose
+// protocol is inferred.
+type SuccessCriteria struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Success criteria for HTTP responses.
+	Http *SuccessCriteria_HttpCriteria `protobuf:"bytes,1,opt,name=http,proto3" json:"http,omitempty"`
+	// Success criteria for gRPC responses.
+	Grpc          *SuccessCriteria_GrpcCriteria `protobuf:"bytes,2,opt,name=grpc,proto3" json:"grpc,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SuccessCriteria) Reset() {
+	*x = SuccessCriteria{}
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SuccessCriteria) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SuccessCriteria) ProtoMessage() {}
+
+func (x *SuccessCriteria) ProtoReflect() protoreflect.Message {
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SuccessCriteria.ProtoReflect.Descriptor instead.
+func (*SuccessCriteria) Descriptor() ([]byte, []int) {
+	return file_networking_v1alpha3_destination_rule_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *SuccessCriteria) GetHttp() *SuccessCriteria_HttpCriteria {
+	if x != nil {
+		return x.Http
+	}
+	return nil
+}
+
+func (x *SuccessCriteria) GetGrpc() *SuccessCriteria_GrpcCriteria {
+	if x != nil {
+		return x.Grpc
+	}
+	return nil
+}
+
 // SSL/TLS related settings for upstream connections. See Envoy's [TLS
 // context](https://www.envoyproxy.io/docs/envoy/latest/api-v3/extensions/transport_sockets/tls/v3/common.proto.html#common-tls-configuration)
 // for more details. These settings are common to both HTTP and TCP upstreams.
@@ -1521,7 +1807,7 @@ type ClientTLSSettings struct {
 
 func (x *ClientTLSSettings) Reset() {
 	*x = ClientTLSSettings{}
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[7]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1533,7 +1819,7 @@ func (x *ClientTLSSettings) String() string {
 func (*ClientTLSSettings) ProtoMessage() {}
 
 func (x *ClientTLSSettings) ProtoReflect() protoreflect.Message {
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[7]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1546,7 +1832,7 @@ func (x *ClientTLSSettings) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientTLSSettings.ProtoReflect.Descriptor instead.
 func (*ClientTLSSettings) Descriptor() ([]byte, []int) {
-	return file_networking_v1alpha3_destination_rule_proto_rawDescGZIP(), []int{7}
+	return file_networking_v1alpha3_destination_rule_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ClientTLSSettings) GetMode() ClientTLSSettings_TLSmode {
@@ -1677,22 +1963,21 @@ type LocalityLoadBalancerSetting struct {
 	// failoverPriority is an ordered list of labels used to sort endpoints to do priority based load balancing.
 	// This is to support traffic failover across different groups of endpoints.
 	// Two kinds of labels can be specified:
+	// - Specify only label keys `[key1, key2, key3]`, istio would compare the label values of client with endpoints.
+	//   Suppose there are total N label keys `[key1, key2, key3, ...keyN]` specified:
 	//
-	//   - Specify only label keys `[key1, key2, key3]`, istio would compare the label values of client with endpoints.
-	//     Suppose there are total N label keys `[key1, key2, key3, ...keyN]` specified:
+	//   1. Endpoints matching all N labels with the client proxy have priority P(0) i.e. the highest priority.
+	//   2. Endpoints matching the first N-1 labels with the client proxy have priority P(1) i.e. second highest priority.
+	//   3. By extension of this logic, endpoints matching only the first label with the client proxy has priority P(N-1) i.e. second lowest priority.
+	//   4. All the other endpoints have priority P(N) i.e. lowest priority.
 	//
-	//     1. Endpoints matching all N labels with the client proxy have priority P(0) i.e. the highest priority.
-	//     2. Endpoints matching the first N-1 labels with the client proxy have priority P(1) i.e. second highest priority.
-	//     3. By extension of this logic, endpoints matching only the first label with the client proxy has priority P(N-1) i.e. second lowest priority.
-	//     4. All the other endpoints have priority P(N) i.e. lowest priority.
+	// - Specify labels with key and value `[key1=value1, key2=value2, key3=value3]`, istio would compare the labels with endpoints.
+	//   Suppose there are total N labels `[key1=value1, key2=value2, key3=value3, ...keyN=valueN]` specified:
 	//
-	//   - Specify labels with key and value `[key1=value1, key2=value2, key3=value3]`, istio would compare the labels with endpoints.
-	//     Suppose there are total N labels `[key1=value1, key2=value2, key3=value3, ...keyN=valueN]` specified:
-	//
-	//     1. Endpoints matching all N labels have priority P(0) i.e. the highest priority.
-	//     2. Endpoints matching the first N-1 labels have priority P(1) i.e. second highest priority.
-	//     3. By extension of this logic, endpoints matching only the first label has priority P(N-1) i.e. second lowest priority.
-	//     4. All the other endpoints have priority P(N) i.e. lowest priority.
+	//   1. Endpoints matching all N labels have priority P(0) i.e. the highest priority.
+	//   2. Endpoints matching the first N-1 labels have priority P(1) i.e. second highest priority.
+	//   3. By extension of this logic, endpoints matching only the first label has priority P(N-1) i.e. second lowest priority.
+	//   4. All the other endpoints have priority P(N) i.e. lowest priority.
 	//
 	// Note: For a label to be considered for match, the previous labels must match, i.e. nth label would be considered matched only if first n-1 labels match.
 	//
@@ -1745,7 +2030,7 @@ type LocalityLoadBalancerSetting struct {
 
 func (x *LocalityLoadBalancerSetting) Reset() {
 	*x = LocalityLoadBalancerSetting{}
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[8]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1757,7 +2042,7 @@ func (x *LocalityLoadBalancerSetting) String() string {
 func (*LocalityLoadBalancerSetting) ProtoMessage() {}
 
 func (x *LocalityLoadBalancerSetting) ProtoReflect() protoreflect.Message {
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[8]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1770,7 +2055,7 @@ func (x *LocalityLoadBalancerSetting) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LocalityLoadBalancerSetting.ProtoReflect.Descriptor instead.
 func (*LocalityLoadBalancerSetting) Descriptor() ([]byte, []int) {
-	return file_networking_v1alpha3_destination_rule_proto_rawDescGZIP(), []int{8}
+	return file_networking_v1alpha3_destination_rule_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *LocalityLoadBalancerSetting) GetDistribute() []*LocalityLoadBalancerSetting_Distribute {
@@ -1918,22 +2203,21 @@ type ZoneAwareLoadBalancerSetting struct {
 	// `topology.istio.io/subzone` labels.
 	//
 	// Two kinds of labels can be specified:
+	// - Specify only label keys `[key1, key2, key3]`, istio would compare the label values of client with endpoints.
+	//   Suppose there are total N label keys `[key1, key2, key3, ...keyN]` specified:
 	//
-	//   - Specify only label keys `[key1, key2, key3]`, istio would compare the label values of client with endpoints.
-	//     Suppose there are total N label keys `[key1, key2, key3, ...keyN]` specified:
+	//   1. Endpoints matching all N labels with the client proxy have priority P(0) i.e. the highest priority.
+	//   2. Endpoints matching the first N-1 labels with the client proxy have priority P(1) i.e. second highest priority.
+	//   3. By extension of this logic, endpoints matching only the first label with the client proxy has priority P(N-1) i.e. second lowest priority.
+	//   4. All the other endpoints have priority P(N) i.e. lowest priority.
 	//
-	//     1. Endpoints matching all N labels with the client proxy have priority P(0) i.e. the highest priority.
-	//     2. Endpoints matching the first N-1 labels with the client proxy have priority P(1) i.e. second highest priority.
-	//     3. By extension of this logic, endpoints matching only the first label with the client proxy has priority P(N-1) i.e. second lowest priority.
-	//     4. All the other endpoints have priority P(N) i.e. lowest priority.
+	// - Specify labels with key and value `[key1=value1, key2=value2, key3=value3]`, istio would compare the labels with endpoints.
+	//   Suppose there are total N labels `[key1=value1, key2=value2, key3=value3, ...keyN=valueN]` specified:
 	//
-	//   - Specify labels with key and value `[key1=value1, key2=value2, key3=value3]`, istio would compare the labels with endpoints.
-	//     Suppose there are total N labels `[key1=value1, key2=value2, key3=value3, ...keyN=valueN]` specified:
-	//
-	//     1. Endpoints matching all N labels have priority P(0) i.e. the highest priority.
-	//     2. Endpoints matching the first N-1 labels have priority P(1) i.e. second highest priority.
-	//     3. By extension of this logic, endpoints matching only the first label has priority P(N-1) i.e. second lowest priority.
-	//     4. All the other endpoints have priority P(N) i.e. lowest priority.
+	//   1. Endpoints matching all N labels have priority P(0) i.e. the highest priority.
+	//   2. Endpoints matching the first N-1 labels have priority P(1) i.e. second highest priority.
+	//   3. By extension of this logic, endpoints matching only the first label has priority P(N-1) i.e. second lowest priority.
+	//   4. All the other endpoints have priority P(N) i.e. lowest priority.
 	//
 	// Note: For a label to be considered for match, the previous labels must match, i.e. nth label would be considered matched only if first n-1 labels match.
 	//
@@ -1992,7 +2276,7 @@ type ZoneAwareLoadBalancerSetting struct {
 
 func (x *ZoneAwareLoadBalancerSetting) Reset() {
 	*x = ZoneAwareLoadBalancerSetting{}
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[9]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2004,7 +2288,7 @@ func (x *ZoneAwareLoadBalancerSetting) String() string {
 func (*ZoneAwareLoadBalancerSetting) ProtoMessage() {}
 
 func (x *ZoneAwareLoadBalancerSetting) ProtoReflect() protoreflect.Message {
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[9]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2017,7 +2301,7 @@ func (x *ZoneAwareLoadBalancerSetting) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ZoneAwareLoadBalancerSetting.ProtoReflect.Descriptor instead.
 func (*ZoneAwareLoadBalancerSetting) Descriptor() ([]byte, []int) {
-	return file_networking_v1alpha3_destination_rule_proto_rawDescGZIP(), []int{9}
+	return file_networking_v1alpha3_destination_rule_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ZoneAwareLoadBalancerSetting) GetEnabled() *wrappers.BoolValue {
@@ -2053,6 +2337,7 @@ type TrafficPolicy_PortTrafficPolicy struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Specifies the number of a port on the destination service
 	// on which this policy is being applied.
+	//
 	Port *PortSelector `protobuf:"bytes,1,opt,name=port,proto3" json:"port,omitempty"`
 	// Settings controlling the load balancer algorithms.
 	LoadBalancer *LoadBalancerSettings `protobuf:"bytes,2,opt,name=load_balancer,json=loadBalancer,proto3" json:"load_balancer,omitempty"`
@@ -2061,14 +2346,17 @@ type TrafficPolicy_PortTrafficPolicy struct {
 	// Settings controlling eviction of unhealthy hosts from the load balancing pool
 	OutlierDetection *OutlierDetection `protobuf:"bytes,4,opt,name=outlier_detection,json=outlierDetection,proto3" json:"outlier_detection,omitempty"`
 	// TLS related settings for connections to the upstream service.
-	Tls           *ClientTLSSettings `protobuf:"bytes,5,opt,name=tls,proto3" json:"tls,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Tls *ClientTLSSettings `protobuf:"bytes,5,opt,name=tls,proto3" json:"tls,omitempty"`
+	// Admission control based on the observed success rate of the upstream
+	// service, applied to this specific port.
+	AdmissionControl *AdmissionControlPolicy `protobuf:"bytes,6,opt,name=admission_control,json=admissionControl,proto3" json:"admission_control,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *TrafficPolicy_PortTrafficPolicy) Reset() {
 	*x = TrafficPolicy_PortTrafficPolicy{}
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[10]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2080,7 +2368,7 @@ func (x *TrafficPolicy_PortTrafficPolicy) String() string {
 func (*TrafficPolicy_PortTrafficPolicy) ProtoMessage() {}
 
 func (x *TrafficPolicy_PortTrafficPolicy) ProtoReflect() protoreflect.Message {
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[10]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2131,12 +2419,19 @@ func (x *TrafficPolicy_PortTrafficPolicy) GetTls() *ClientTLSSettings {
 	return nil
 }
 
+func (x *TrafficPolicy_PortTrafficPolicy) GetAdmissionControl() *AdmissionControlPolicy {
+	if x != nil {
+		return x.AdmissionControl
+	}
+	return nil
+}
+
 type TrafficPolicy_TunnelSettings struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Specifies which protocol to use for tunneling the downstream connection.
 	// Supported protocols are:
-	//   - CONNECT - uses HTTP CONNECT;
-	//   - POST - uses HTTP POST.
+	//   * CONNECT - uses HTTP CONNECT;
+	//   * POST - uses HTTP POST.
 	//
 	// CONNECT is used by default if not specified.
 	//
@@ -2153,7 +2448,7 @@ type TrafficPolicy_TunnelSettings struct {
 
 func (x *TrafficPolicy_TunnelSettings) Reset() {
 	*x = TrafficPolicy_TunnelSettings{}
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[11]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2165,7 +2460,7 @@ func (x *TrafficPolicy_TunnelSettings) String() string {
 func (*TrafficPolicy_TunnelSettings) ProtoMessage() {}
 
 func (x *TrafficPolicy_TunnelSettings) ProtoReflect() protoreflect.Message {
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[11]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2213,7 +2508,7 @@ type TrafficPolicy_ProxyProtocol struct {
 
 func (x *TrafficPolicy_ProxyProtocol) Reset() {
 	*x = TrafficPolicy_ProxyProtocol{}
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[12]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2225,7 +2520,7 @@ func (x *TrafficPolicy_ProxyProtocol) String() string {
 func (*TrafficPolicy_ProxyProtocol) ProtoMessage() {}
 
 func (x *TrafficPolicy_ProxyProtocol) ProtoReflect() protoreflect.Message {
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[12]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2264,6 +2559,7 @@ type TrafficPolicy_RetryBudget struct {
 	// allowed because of the minimum retry concurrency.
 	//
 	// Defaults to 3.
+	//
 	MinRetryConcurrency uint32 `protobuf:"varint,2,opt,name=min_retry_concurrency,json=minRetryConcurrency,proto3" json:"min_retry_concurrency,omitempty"`
 	// Specifies the duration in which requests will be considered when calculating
 	// the budget for retries. This parameter alters the way in which the retry budget
@@ -2286,7 +2582,7 @@ type TrafficPolicy_RetryBudget struct {
 
 func (x *TrafficPolicy_RetryBudget) Reset() {
 	*x = TrafficPolicy_RetryBudget{}
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[13]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2298,7 +2594,7 @@ func (x *TrafficPolicy_RetryBudget) String() string {
 func (*TrafficPolicy_RetryBudget) ProtoMessage() {}
 
 func (x *TrafficPolicy_RetryBudget) ProtoReflect() protoreflect.Message {
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[13]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2383,7 +2679,7 @@ type LoadBalancerSettings_ConsistentHashLB struct {
 
 func (x *LoadBalancerSettings_ConsistentHashLB) Reset() {
 	*x = LoadBalancerSettings_ConsistentHashLB{}
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[15]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2395,7 +2691,7 @@ func (x *LoadBalancerSettings_ConsistentHashLB) String() string {
 func (*LoadBalancerSettings_ConsistentHashLB) ProtoMessage() {}
 
 func (x *LoadBalancerSettings_ConsistentHashLB) ProtoReflect() protoreflect.Message {
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[15]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2597,7 +2893,7 @@ type LoadBalancerSettings_BackendUtilizationLB struct {
 
 func (x *LoadBalancerSettings_BackendUtilizationLB) Reset() {
 	*x = LoadBalancerSettings_BackendUtilizationLB{}
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[16]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2609,7 +2905,7 @@ func (x *LoadBalancerSettings_BackendUtilizationLB) String() string {
 func (*LoadBalancerSettings_BackendUtilizationLB) ProtoMessage() {}
 
 func (x *LoadBalancerSettings_BackendUtilizationLB) ProtoReflect() protoreflect.Message {
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[16]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2674,7 +2970,7 @@ type LoadBalancerSettings_ConsistentHashLB_RingHash struct {
 
 func (x *LoadBalancerSettings_ConsistentHashLB_RingHash) Reset() {
 	*x = LoadBalancerSettings_ConsistentHashLB_RingHash{}
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[17]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2686,7 +2982,7 @@ func (x *LoadBalancerSettings_ConsistentHashLB_RingHash) String() string {
 func (*LoadBalancerSettings_ConsistentHashLB_RingHash) ProtoMessage() {}
 
 func (x *LoadBalancerSettings_ConsistentHashLB_RingHash) ProtoReflect() protoreflect.Message {
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[17]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2723,7 +3019,7 @@ type LoadBalancerSettings_ConsistentHashLB_MagLev struct {
 
 func (x *LoadBalancerSettings_ConsistentHashLB_MagLev) Reset() {
 	*x = LoadBalancerSettings_ConsistentHashLB_MagLev{}
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[18]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2735,7 +3031,7 @@ func (x *LoadBalancerSettings_ConsistentHashLB_MagLev) String() string {
 func (*LoadBalancerSettings_ConsistentHashLB_MagLev) ProtoMessage() {}
 
 func (x *LoadBalancerSettings_ConsistentHashLB_MagLev) ProtoReflect() protoreflect.Message {
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[18]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2779,7 +3075,7 @@ type LoadBalancerSettings_ConsistentHashLB_HTTPCookie struct {
 
 func (x *LoadBalancerSettings_ConsistentHashLB_HTTPCookie) Reset() {
 	*x = LoadBalancerSettings_ConsistentHashLB_HTTPCookie{}
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[19]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2791,7 +3087,7 @@ func (x *LoadBalancerSettings_ConsistentHashLB_HTTPCookie) String() string {
 func (*LoadBalancerSettings_ConsistentHashLB_HTTPCookie) ProtoMessage() {}
 
 func (x *LoadBalancerSettings_ConsistentHashLB_HTTPCookie) ProtoReflect() protoreflect.Message {
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[19]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2848,7 +3144,7 @@ type LoadBalancerSettings_ConsistentHashLB_HTTPCookie_Attribute struct {
 
 func (x *LoadBalancerSettings_ConsistentHashLB_HTTPCookie_Attribute) Reset() {
 	*x = LoadBalancerSettings_ConsistentHashLB_HTTPCookie_Attribute{}
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[20]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2860,7 +3156,7 @@ func (x *LoadBalancerSettings_ConsistentHashLB_HTTPCookie_Attribute) String() st
 func (*LoadBalancerSettings_ConsistentHashLB_HTTPCookie_Attribute) ProtoMessage() {}
 
 func (x *LoadBalancerSettings_ConsistentHashLB_HTTPCookie_Attribute) ProtoReflect() protoreflect.Message {
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[20]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2917,10 +3213,8 @@ type ConnectionPoolSettings_TCPSettings struct {
 	// annotation) which applies to all inbound connections.
 	// ```
 	// proxy.istio.io/config: |-
-	//
-	//	proxyMetadata:
-	//	   ISTIO_META_IDLE_TIMEOUT: "100s"
-	//
+	//    proxyMetadata:
+	//       ISTIO_META_IDLE_TIMEOUT: "100s"
 	// ```
 	// +protoc-gen-crd:duration-validation:none
 	IdleTimeout   *duration.Duration `protobuf:"bytes,5,opt,name=idle_timeout,json=idleTimeout,proto3" json:"idle_timeout,omitempty"`
@@ -2930,7 +3224,7 @@ type ConnectionPoolSettings_TCPSettings struct {
 
 func (x *ConnectionPoolSettings_TCPSettings) Reset() {
 	*x = ConnectionPoolSettings_TCPSettings{}
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[21]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2942,7 +3236,7 @@ func (x *ConnectionPoolSettings_TCPSettings) String() string {
 func (*ConnectionPoolSettings_TCPSettings) ProtoMessage() {}
 
 func (x *ConnectionPoolSettings_TCPSettings) ProtoReflect() protoreflect.Message {
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[21]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3037,7 +3331,7 @@ type ConnectionPoolSettings_HTTPSettings struct {
 
 func (x *ConnectionPoolSettings_HTTPSettings) Reset() {
 	*x = ConnectionPoolSettings_HTTPSettings{}
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[22]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3049,7 +3343,7 @@ func (x *ConnectionPoolSettings_HTTPSettings) String() string {
 func (*ConnectionPoolSettings_HTTPSettings) ProtoMessage() {}
 
 func (x *ConnectionPoolSettings_HTTPSettings) ProtoReflect() protoreflect.Message {
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[22]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3149,7 +3443,7 @@ type ConnectionPoolSettings_TCPSettings_TcpKeepalive struct {
 
 func (x *ConnectionPoolSettings_TCPSettings_TcpKeepalive) Reset() {
 	*x = ConnectionPoolSettings_TCPSettings_TcpKeepalive{}
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[23]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3161,7 +3455,7 @@ func (x *ConnectionPoolSettings_TCPSettings_TcpKeepalive) String() string {
 func (*ConnectionPoolSettings_TCPSettings_TcpKeepalive) ProtoMessage() {}
 
 func (x *ConnectionPoolSettings_TCPSettings_TcpKeepalive) ProtoReflect() protoreflect.Message {
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[23]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3213,7 +3507,7 @@ type ConnectionPoolSettings_HTTPSettings_ConnectionKeepalive struct {
 
 func (x *ConnectionPoolSettings_HTTPSettings_ConnectionKeepalive) Reset() {
 	*x = ConnectionPoolSettings_HTTPSettings_ConnectionKeepalive{}
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[24]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3225,7 +3519,7 @@ func (x *ConnectionPoolSettings_HTTPSettings_ConnectionKeepalive) String() strin
 func (*ConnectionPoolSettings_HTTPSettings_ConnectionKeepalive) ProtoMessage() {}
 
 func (x *ConnectionPoolSettings_HTTPSettings_ConnectionKeepalive) ProtoReflect() protoreflect.Message {
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[24]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3255,6 +3549,164 @@ func (x *ConnectionPoolSettings_HTTPSettings_ConnectionKeepalive) GetTimeout() *
 	return nil
 }
 
+// HttpCriteria defines the HTTP status codes that are treated as successful.
+type SuccessCriteria_HttpCriteria struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The set of HTTP status ranges considered successful. If present, it must
+	// contain at least one range.
+	StatusRanges  []*SuccessCriteria_HttpCriteria_StatusRange `protobuf:"bytes,1,rep,name=status_ranges,json=statusRanges,proto3" json:"status_ranges,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SuccessCriteria_HttpCriteria) Reset() {
+	*x = SuccessCriteria_HttpCriteria{}
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SuccessCriteria_HttpCriteria) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SuccessCriteria_HttpCriteria) ProtoMessage() {}
+
+func (x *SuccessCriteria_HttpCriteria) ProtoReflect() protoreflect.Message {
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SuccessCriteria_HttpCriteria.ProtoReflect.Descriptor instead.
+func (*SuccessCriteria_HttpCriteria) Descriptor() ([]byte, []int) {
+	return file_networking_v1alpha3_destination_rule_proto_rawDescGZIP(), []int{9, 0}
+}
+
+func (x *SuccessCriteria_HttpCriteria) GetStatusRanges() []*SuccessCriteria_HttpCriteria_StatusRange {
+	if x != nil {
+		return x.StatusRanges
+	}
+	return nil
+}
+
+// GrpcCriteria defines the gRPC status codes that are treated as successful.
+type SuccessCriteria_GrpcCriteria struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Canonical gRPC status names such as `OK`, `NOT_FOUND`, or `UNAVAILABLE`.
+	// Istiod validates these names and translates them to Envoy numeric codes.
+	// If present, it must contain at least one valid name.
+	StatusCodes   []string `protobuf:"bytes,1,rep,name=status_codes,json=statusCodes,proto3" json:"status_codes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SuccessCriteria_GrpcCriteria) Reset() {
+	*x = SuccessCriteria_GrpcCriteria{}
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SuccessCriteria_GrpcCriteria) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SuccessCriteria_GrpcCriteria) ProtoMessage() {}
+
+func (x *SuccessCriteria_GrpcCriteria) ProtoReflect() protoreflect.Message {
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SuccessCriteria_GrpcCriteria.ProtoReflect.Descriptor instead.
+func (*SuccessCriteria_GrpcCriteria) Descriptor() ([]byte, []int) {
+	return file_networking_v1alpha3_destination_rule_proto_rawDescGZIP(), []int{9, 1}
+}
+
+func (x *SuccessCriteria_GrpcCriteria) GetStatusCodes() []string {
+	if x != nil {
+		return x.StatusCodes
+	}
+	return nil
+}
+
+// StatusRange is a half-open range of HTTP status codes: `start` is
+// inclusive and `end` is exclusive, i.e. `[start, end)`.
+type SuccessCriteria_HttpCriteria_StatusRange struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Inclusive lower bound of the range. Must be in the range [100, 600].
+	//
+	// +kubebuilder:validation:Minimum=100
+	// +kubebuilder:validation:Maximum=600
+	Start uint32 `protobuf:"varint,1,opt,name=start,proto3" json:"start,omitempty"`
+	// Exclusive upper bound of the range. Must be in the range [100, 600] and
+	// strictly greater than `start`.
+	//
+	// +kubebuilder:validation:Minimum=100
+	// +kubebuilder:validation:Maximum=600
+	End           uint32 `protobuf:"varint,2,opt,name=end,proto3" json:"end,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SuccessCriteria_HttpCriteria_StatusRange) Reset() {
+	*x = SuccessCriteria_HttpCriteria_StatusRange{}
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SuccessCriteria_HttpCriteria_StatusRange) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SuccessCriteria_HttpCriteria_StatusRange) ProtoMessage() {}
+
+func (x *SuccessCriteria_HttpCriteria_StatusRange) ProtoReflect() protoreflect.Message {
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SuccessCriteria_HttpCriteria_StatusRange.ProtoReflect.Descriptor instead.
+func (*SuccessCriteria_HttpCriteria_StatusRange) Descriptor() ([]byte, []int) {
+	return file_networking_v1alpha3_destination_rule_proto_rawDescGZIP(), []int{9, 0, 0}
+}
+
+func (x *SuccessCriteria_HttpCriteria_StatusRange) GetStart() uint32 {
+	if x != nil {
+		return x.Start
+	}
+	return 0
+}
+
+func (x *SuccessCriteria_HttpCriteria_StatusRange) GetEnd() uint32 {
+	if x != nil {
+		return x.End
+	}
+	return 0
+}
+
 // Describes how traffic originating in the 'from' zone or sub-zone is
 // distributed over a set of 'to' zones. Syntax for specifying a zone is
 // {region}/{zone}/{sub-zone} and terminal wildcards are allowed on any
@@ -3279,7 +3731,7 @@ type LocalityLoadBalancerSetting_Distribute struct {
 
 func (x *LocalityLoadBalancerSetting_Distribute) Reset() {
 	*x = LocalityLoadBalancerSetting_Distribute{}
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[25]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3291,7 +3743,7 @@ func (x *LocalityLoadBalancerSetting_Distribute) String() string {
 func (*LocalityLoadBalancerSetting_Distribute) ProtoMessage() {}
 
 func (x *LocalityLoadBalancerSetting_Distribute) ProtoReflect() protoreflect.Message {
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[25]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3304,7 +3756,7 @@ func (x *LocalityLoadBalancerSetting_Distribute) ProtoReflect() protoreflect.Mes
 
 // Deprecated: Use LocalityLoadBalancerSetting_Distribute.ProtoReflect.Descriptor instead.
 func (*LocalityLoadBalancerSetting_Distribute) Descriptor() ([]byte, []int) {
-	return file_networking_v1alpha3_destination_rule_proto_rawDescGZIP(), []int{8, 0}
+	return file_networking_v1alpha3_destination_rule_proto_rawDescGZIP(), []int{11, 0}
 }
 
 func (x *LocalityLoadBalancerSetting_Distribute) GetFrom() string {
@@ -3341,7 +3793,7 @@ type LocalityLoadBalancerSetting_Failover struct {
 
 func (x *LocalityLoadBalancerSetting_Failover) Reset() {
 	*x = LocalityLoadBalancerSetting_Failover{}
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[26]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3353,7 +3805,7 @@ func (x *LocalityLoadBalancerSetting_Failover) String() string {
 func (*LocalityLoadBalancerSetting_Failover) ProtoMessage() {}
 
 func (x *LocalityLoadBalancerSetting_Failover) ProtoReflect() protoreflect.Message {
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[26]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3366,7 +3818,7 @@ func (x *LocalityLoadBalancerSetting_Failover) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use LocalityLoadBalancerSetting_Failover.ProtoReflect.Descriptor instead.
 func (*LocalityLoadBalancerSetting_Failover) Descriptor() ([]byte, []int) {
-	return file_networking_v1alpha3_destination_rule_proto_rawDescGZIP(), []int{8, 1}
+	return file_networking_v1alpha3_destination_rule_proto_rawDescGZIP(), []int{11, 1}
 }
 
 func (x *LocalityLoadBalancerSetting_Failover) GetFrom() string {
@@ -3403,7 +3855,7 @@ type ZoneAwareLoadBalancerSetting_Failover struct {
 
 func (x *ZoneAwareLoadBalancerSetting_Failover) Reset() {
 	*x = ZoneAwareLoadBalancerSetting_Failover{}
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[28]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3415,7 +3867,7 @@ func (x *ZoneAwareLoadBalancerSetting_Failover) String() string {
 func (*ZoneAwareLoadBalancerSetting_Failover) ProtoMessage() {}
 
 func (x *ZoneAwareLoadBalancerSetting_Failover) ProtoReflect() protoreflect.Message {
-	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[28]
+	mi := &file_networking_v1alpha3_destination_rule_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3428,7 +3880,7 @@ func (x *ZoneAwareLoadBalancerSetting_Failover) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use ZoneAwareLoadBalancerSetting_Failover.ProtoReflect.Descriptor instead.
 func (*ZoneAwareLoadBalancerSetting_Failover) Descriptor() ([]byte, []int) {
-	return file_networking_v1alpha3_destination_rule_proto_rawDescGZIP(), []int{9, 0}
+	return file_networking_v1alpha3_destination_rule_proto_rawDescGZIP(), []int{12, 0}
 }
 
 func (x *ZoneAwareLoadBalancerSetting_Failover) GetFrom() string {
@@ -3455,7 +3907,7 @@ const file_networking_v1alpha3_destination_rule_proto_rawDesc = "" +
 	"\x0etraffic_policy\x18\x02 \x01(\v2(.istio.networking.v1alpha3.TrafficPolicyR\rtrafficPolicy\x12;\n" +
 	"\asubsets\x18\x03 \x03(\v2!.istio.networking.v1alpha3.SubsetR\asubsets\x12\x1b\n" +
 	"\texport_to\x18\x04 \x03(\tR\bexportTo\x12Q\n" +
-	"\x11workload_selector\x18\x05 \x01(\v2$.istio.type.v1beta1.WorkloadSelectorR\x10workloadSelector\"\xb2\f\n" +
+	"\x11workload_selector\x18\x05 \x01(\v2$.istio.type.v1beta1.WorkloadSelectorR\x10workloadSelector\"\xf2\r\n" +
 	"\rTrafficPolicy\x12T\n" +
 	"\rload_balancer\x18\x01 \x01(\v2/.istio.networking.v1alpha3.LoadBalancerSettingsR\floadBalancer\x12Z\n" +
 	"\x0fconnection_pool\x18\x02 \x01(\v21.istio.networking.v1alpha3.ConnectionPoolSettingsR\x0econnectionPool\x12X\n" +
@@ -3464,13 +3916,15 @@ const file_networking_v1alpha3_destination_rule_proto_rawDesc = "" +
 	"\x13port_level_settings\x18\x05 \x03(\v2:.istio.networking.v1alpha3.TrafficPolicy.PortTrafficPolicyR\x11portLevelSettings\x12O\n" +
 	"\x06tunnel\x18\x06 \x01(\v27.istio.networking.v1alpha3.TrafficPolicy.TunnelSettingsR\x06tunnel\x12]\n" +
 	"\x0eproxy_protocol\x18\a \x01(\v26.istio.networking.v1alpha3.TrafficPolicy.ProxyProtocolR\rproxyProtocol\x12W\n" +
-	"\fretry_budget\x18\b \x01(\v24.istio.networking.v1alpha3.TrafficPolicy.RetryBudgetR\vretryBudget\x1a\x9c\x03\n" +
+	"\fretry_budget\x18\b \x01(\v24.istio.networking.v1alpha3.TrafficPolicy.RetryBudgetR\vretryBudget\x12^\n" +
+	"\x11admission_control\x18\t \x01(\v21.istio.networking.v1alpha3.AdmissionControlPolicyR\x10admissionControl\x1a\xfc\x03\n" +
 	"\x11PortTrafficPolicy\x12;\n" +
 	"\x04port\x18\x01 \x01(\v2'.istio.networking.v1alpha3.PortSelectorR\x04port\x12T\n" +
 	"\rload_balancer\x18\x02 \x01(\v2/.istio.networking.v1alpha3.LoadBalancerSettingsR\floadBalancer\x12Z\n" +
 	"\x0fconnection_pool\x18\x03 \x01(\v21.istio.networking.v1alpha3.ConnectionPoolSettingsR\x0econnectionPool\x12X\n" +
 	"\x11outlier_detection\x18\x04 \x01(\v2+.istio.networking.v1alpha3.OutlierDetectionR\x10outlierDetection\x12>\n" +
-	"\x03tls\x18\x05 \x01(\v2,.istio.networking.v1alpha3.ClientTLSSettingsR\x03tls\x1az\n" +
+	"\x03tls\x18\x05 \x01(\v2,.istio.networking.v1alpha3.ClientTLSSettingsR\x03tls\x12^\n" +
+	"\x11admission_control\x18\x06 \x01(\v21.istio.networking.v1alpha3.AdmissionControlPolicyR\x10admissionControl\x1az\n" +
 	"\x0eTunnelSettings\x12\x1a\n" +
 	"\bprotocol\x18\x01 \x01(\tR\bprotocol\x12%\n" +
 	"\vtarget_host\x18\x02 \x01(\tB\x04\xe2A\x01\x02R\n" +
@@ -3594,7 +4048,30 @@ const file_networking_v1alpha3_destination_rule_proto_rawDesc = "" +
 	"\x12min_health_percent\x18\x05 \x01(\x05R\x10minHealthPercent\x12J\n" +
 	"\"outlier_detection_http_error_codes\x18\n" +
 	" \x03(\rR\x1eoutlierDetectionHttpErrorCodes\x12^\n" +
-	"\x1cfailure_percentage_threshold\x18\v \x01(\v2\x1c.google.protobuf.UInt32ValueR\x1afailurePercentageThreshold\"\xe4\x03\n" +
+	"\x1cfailure_percentage_threshold\x18\v \x01(\v2\x1c.google.protobuf.UInt32ValueR\x1afailurePercentageThreshold\"q\n" +
+	"\x16AdmissionControlPolicy\x12K\n" +
+	"\fsuccess_rate\x18\x01 \x01(\v2&.istio.networking.v1alpha3.SuccessRateH\x00R\vsuccessRateB\n" +
+	"\n" +
+	"\bstrategy\"\xcc\x03\n" +
+	"\vSuccessRate\x12B\n" +
+	"\x0fsampling_window\x18\x01 \x01(\v2\x19.google.protobuf.DurationR\x0esamplingWindow\x12:\n" +
+	"\tthreshold\x18\x02 \x01(\v2\x1c.google.protobuf.DoubleValueR\tthreshold\x12<\n" +
+	"\n" +
+	"aggression\x18\x03 \x01(\v2\x1c.google.protobuf.DoubleValueR\n" +
+	"aggression\x12N\n" +
+	"\x14minimum_attempt_rate\x18\x04 \x01(\v2\x1c.google.protobuf.UInt32ValueR\x12minimumAttemptRate\x12X\n" +
+	"\x19maximum_rejection_percent\x18\x05 \x01(\v2\x1c.google.protobuf.DoubleValueR\x17maximumRejectionPercent\x12U\n" +
+	"\x10success_criteria\x18\x06 \x01(\v2*.istio.networking.v1alpha3.SuccessCriteriaR\x0fsuccessCriteria\"\x90\x03\n" +
+	"\x0fSuccessCriteria\x12K\n" +
+	"\x04http\x18\x01 \x01(\v27.istio.networking.v1alpha3.SuccessCriteria.HttpCriteriaR\x04http\x12K\n" +
+	"\x04grpc\x18\x02 \x01(\v27.istio.networking.v1alpha3.SuccessCriteria.GrpcCriteriaR\x04grpc\x1a\xaf\x01\n" +
+	"\fHttpCriteria\x12h\n" +
+	"\rstatus_ranges\x18\x01 \x03(\v2C.istio.networking.v1alpha3.SuccessCriteria.HttpCriteria.StatusRangeR\fstatusRanges\x1a5\n" +
+	"\vStatusRange\x12\x14\n" +
+	"\x05start\x18\x01 \x01(\rR\x05start\x12\x10\n" +
+	"\x03end\x18\x02 \x01(\rR\x03end\x1a1\n" +
+	"\fGrpcCriteria\x12!\n" +
+	"\fstatus_codes\x18\x01 \x03(\tR\vstatusCodes\"\xe4\x03\n" +
 	"\x11ClientTLSSettings\x12H\n" +
 	"\x04mode\x18\x01 \x01(\x0e24.istio.networking.v1alpha3.ClientTLSSettings.TLSmodeR\x04mode\x12-\n" +
 	"\x12client_certificate\x18\x02 \x01(\tR\x11clientCertificate\x12\x1f\n" +
@@ -3652,7 +4129,7 @@ func file_networking_v1alpha3_destination_rule_proto_rawDescGZIP() []byte {
 }
 
 var file_networking_v1alpha3_destination_rule_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_networking_v1alpha3_destination_rule_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
+var file_networking_v1alpha3_destination_rule_proto_msgTypes = make([]protoimpl.MessageInfo, 35)
 var file_networking_v1alpha3_destination_rule_proto_goTypes = []any{
 	(TrafficPolicy_ProxyProtocol_VERSION)(0),                           // 0: istio.networking.v1alpha3.TrafficPolicy.ProxyProtocol.VERSION
 	(LoadBalancerSettings_SimpleLB)(0),                                 // 1: istio.networking.v1alpha3.LoadBalancerSettings.SimpleLB
@@ -3665,108 +4142,126 @@ var file_networking_v1alpha3_destination_rule_proto_goTypes = []any{
 	(*WarmupConfiguration)(nil),                                        // 8: istio.networking.v1alpha3.WarmupConfiguration
 	(*ConnectionPoolSettings)(nil),                                     // 9: istio.networking.v1alpha3.ConnectionPoolSettings
 	(*OutlierDetection)(nil),                                           // 10: istio.networking.v1alpha3.OutlierDetection
-	(*ClientTLSSettings)(nil),                                          // 11: istio.networking.v1alpha3.ClientTLSSettings
-	(*LocalityLoadBalancerSetting)(nil),                                // 12: istio.networking.v1alpha3.LocalityLoadBalancerSetting
-	(*ZoneAwareLoadBalancerSetting)(nil),                               // 13: istio.networking.v1alpha3.ZoneAwareLoadBalancerSetting
-	(*TrafficPolicy_PortTrafficPolicy)(nil),                            // 14: istio.networking.v1alpha3.TrafficPolicy.PortTrafficPolicy
-	(*TrafficPolicy_TunnelSettings)(nil),                               // 15: istio.networking.v1alpha3.TrafficPolicy.TunnelSettings
-	(*TrafficPolicy_ProxyProtocol)(nil),                                // 16: istio.networking.v1alpha3.TrafficPolicy.ProxyProtocol
-	(*TrafficPolicy_RetryBudget)(nil),                                  // 17: istio.networking.v1alpha3.TrafficPolicy.RetryBudget
-	nil,                                                                // 18: istio.networking.v1alpha3.Subset.LabelsEntry
-	(*LoadBalancerSettings_ConsistentHashLB)(nil),                      // 19: istio.networking.v1alpha3.LoadBalancerSettings.ConsistentHashLB
-	(*LoadBalancerSettings_BackendUtilizationLB)(nil),                  // 20: istio.networking.v1alpha3.LoadBalancerSettings.BackendUtilizationLB
-	(*LoadBalancerSettings_ConsistentHashLB_RingHash)(nil),             // 21: istio.networking.v1alpha3.LoadBalancerSettings.ConsistentHashLB.RingHash
-	(*LoadBalancerSettings_ConsistentHashLB_MagLev)(nil),               // 22: istio.networking.v1alpha3.LoadBalancerSettings.ConsistentHashLB.MagLev
-	(*LoadBalancerSettings_ConsistentHashLB_HTTPCookie)(nil),           // 23: istio.networking.v1alpha3.LoadBalancerSettings.ConsistentHashLB.HTTPCookie
-	(*LoadBalancerSettings_ConsistentHashLB_HTTPCookie_Attribute)(nil), // 24: istio.networking.v1alpha3.LoadBalancerSettings.ConsistentHashLB.HTTPCookie.Attribute
-	(*ConnectionPoolSettings_TCPSettings)(nil),                         // 25: istio.networking.v1alpha3.ConnectionPoolSettings.TCPSettings
-	(*ConnectionPoolSettings_HTTPSettings)(nil),                        // 26: istio.networking.v1alpha3.ConnectionPoolSettings.HTTPSettings
-	(*ConnectionPoolSettings_TCPSettings_TcpKeepalive)(nil),            // 27: istio.networking.v1alpha3.ConnectionPoolSettings.TCPSettings.TcpKeepalive
-	(*ConnectionPoolSettings_HTTPSettings_ConnectionKeepalive)(nil),    // 28: istio.networking.v1alpha3.ConnectionPoolSettings.HTTPSettings.ConnectionKeepalive
-	(*LocalityLoadBalancerSetting_Distribute)(nil),                     // 29: istio.networking.v1alpha3.LocalityLoadBalancerSetting.Distribute
-	(*LocalityLoadBalancerSetting_Failover)(nil),                       // 30: istio.networking.v1alpha3.LocalityLoadBalancerSetting.Failover
-	nil, // 31: istio.networking.v1alpha3.LocalityLoadBalancerSetting.Distribute.ToEntry
-	(*ZoneAwareLoadBalancerSetting_Failover)(nil), // 32: istio.networking.v1alpha3.ZoneAwareLoadBalancerSetting.Failover
-	(*v1beta1.WorkloadSelector)(nil),              // 33: istio.type.v1beta1.WorkloadSelector
-	(*duration.Duration)(nil),                     // 34: google.protobuf.Duration
-	(*wrappers.DoubleValue)(nil),                  // 35: google.protobuf.DoubleValue
-	(*wrappers.UInt32Value)(nil),                  // 36: google.protobuf.UInt32Value
-	(*wrappers.BoolValue)(nil),                    // 37: google.protobuf.BoolValue
-	(*PortSelector)(nil),                          // 38: istio.networking.v1alpha3.PortSelector
+	(*AdmissionControlPolicy)(nil),                                     // 11: istio.networking.v1alpha3.AdmissionControlPolicy
+	(*SuccessRate)(nil),                                                // 12: istio.networking.v1alpha3.SuccessRate
+	(*SuccessCriteria)(nil),                                            // 13: istio.networking.v1alpha3.SuccessCriteria
+	(*ClientTLSSettings)(nil),                                          // 14: istio.networking.v1alpha3.ClientTLSSettings
+	(*LocalityLoadBalancerSetting)(nil),                                // 15: istio.networking.v1alpha3.LocalityLoadBalancerSetting
+	(*ZoneAwareLoadBalancerSetting)(nil),                               // 16: istio.networking.v1alpha3.ZoneAwareLoadBalancerSetting
+	(*TrafficPolicy_PortTrafficPolicy)(nil),                            // 17: istio.networking.v1alpha3.TrafficPolicy.PortTrafficPolicy
+	(*TrafficPolicy_TunnelSettings)(nil),                               // 18: istio.networking.v1alpha3.TrafficPolicy.TunnelSettings
+	(*TrafficPolicy_ProxyProtocol)(nil),                                // 19: istio.networking.v1alpha3.TrafficPolicy.ProxyProtocol
+	(*TrafficPolicy_RetryBudget)(nil),                                  // 20: istio.networking.v1alpha3.TrafficPolicy.RetryBudget
+	nil,                                                                // 21: istio.networking.v1alpha3.Subset.LabelsEntry
+	(*LoadBalancerSettings_ConsistentHashLB)(nil),                      // 22: istio.networking.v1alpha3.LoadBalancerSettings.ConsistentHashLB
+	(*LoadBalancerSettings_BackendUtilizationLB)(nil),                  // 23: istio.networking.v1alpha3.LoadBalancerSettings.BackendUtilizationLB
+	(*LoadBalancerSettings_ConsistentHashLB_RingHash)(nil),             // 24: istio.networking.v1alpha3.LoadBalancerSettings.ConsistentHashLB.RingHash
+	(*LoadBalancerSettings_ConsistentHashLB_MagLev)(nil),               // 25: istio.networking.v1alpha3.LoadBalancerSettings.ConsistentHashLB.MagLev
+	(*LoadBalancerSettings_ConsistentHashLB_HTTPCookie)(nil),           // 26: istio.networking.v1alpha3.LoadBalancerSettings.ConsistentHashLB.HTTPCookie
+	(*LoadBalancerSettings_ConsistentHashLB_HTTPCookie_Attribute)(nil), // 27: istio.networking.v1alpha3.LoadBalancerSettings.ConsistentHashLB.HTTPCookie.Attribute
+	(*ConnectionPoolSettings_TCPSettings)(nil),                         // 28: istio.networking.v1alpha3.ConnectionPoolSettings.TCPSettings
+	(*ConnectionPoolSettings_HTTPSettings)(nil),                        // 29: istio.networking.v1alpha3.ConnectionPoolSettings.HTTPSettings
+	(*ConnectionPoolSettings_TCPSettings_TcpKeepalive)(nil),            // 30: istio.networking.v1alpha3.ConnectionPoolSettings.TCPSettings.TcpKeepalive
+	(*ConnectionPoolSettings_HTTPSettings_ConnectionKeepalive)(nil),    // 31: istio.networking.v1alpha3.ConnectionPoolSettings.HTTPSettings.ConnectionKeepalive
+	(*SuccessCriteria_HttpCriteria)(nil),                               // 32: istio.networking.v1alpha3.SuccessCriteria.HttpCriteria
+	(*SuccessCriteria_GrpcCriteria)(nil),                               // 33: istio.networking.v1alpha3.SuccessCriteria.GrpcCriteria
+	(*SuccessCriteria_HttpCriteria_StatusRange)(nil),                   // 34: istio.networking.v1alpha3.SuccessCriteria.HttpCriteria.StatusRange
+	(*LocalityLoadBalancerSetting_Distribute)(nil),                     // 35: istio.networking.v1alpha3.LocalityLoadBalancerSetting.Distribute
+	(*LocalityLoadBalancerSetting_Failover)(nil),                       // 36: istio.networking.v1alpha3.LocalityLoadBalancerSetting.Failover
+	nil, // 37: istio.networking.v1alpha3.LocalityLoadBalancerSetting.Distribute.ToEntry
+	(*ZoneAwareLoadBalancerSetting_Failover)(nil), // 38: istio.networking.v1alpha3.ZoneAwareLoadBalancerSetting.Failover
+	(*v1beta1.WorkloadSelector)(nil),              // 39: istio.type.v1beta1.WorkloadSelector
+	(*duration.Duration)(nil),                     // 40: google.protobuf.Duration
+	(*wrappers.DoubleValue)(nil),                  // 41: google.protobuf.DoubleValue
+	(*wrappers.UInt32Value)(nil),                  // 42: google.protobuf.UInt32Value
+	(*wrappers.BoolValue)(nil),                    // 43: google.protobuf.BoolValue
+	(*PortSelector)(nil),                          // 44: istio.networking.v1alpha3.PortSelector
 }
 var file_networking_v1alpha3_destination_rule_proto_depIdxs = []int32{
 	5,  // 0: istio.networking.v1alpha3.DestinationRule.traffic_policy:type_name -> istio.networking.v1alpha3.TrafficPolicy
 	6,  // 1: istio.networking.v1alpha3.DestinationRule.subsets:type_name -> istio.networking.v1alpha3.Subset
-	33, // 2: istio.networking.v1alpha3.DestinationRule.workload_selector:type_name -> istio.type.v1beta1.WorkloadSelector
+	39, // 2: istio.networking.v1alpha3.DestinationRule.workload_selector:type_name -> istio.type.v1beta1.WorkloadSelector
 	7,  // 3: istio.networking.v1alpha3.TrafficPolicy.load_balancer:type_name -> istio.networking.v1alpha3.LoadBalancerSettings
 	9,  // 4: istio.networking.v1alpha3.TrafficPolicy.connection_pool:type_name -> istio.networking.v1alpha3.ConnectionPoolSettings
 	10, // 5: istio.networking.v1alpha3.TrafficPolicy.outlier_detection:type_name -> istio.networking.v1alpha3.OutlierDetection
-	11, // 6: istio.networking.v1alpha3.TrafficPolicy.tls:type_name -> istio.networking.v1alpha3.ClientTLSSettings
-	14, // 7: istio.networking.v1alpha3.TrafficPolicy.port_level_settings:type_name -> istio.networking.v1alpha3.TrafficPolicy.PortTrafficPolicy
-	15, // 8: istio.networking.v1alpha3.TrafficPolicy.tunnel:type_name -> istio.networking.v1alpha3.TrafficPolicy.TunnelSettings
-	16, // 9: istio.networking.v1alpha3.TrafficPolicy.proxy_protocol:type_name -> istio.networking.v1alpha3.TrafficPolicy.ProxyProtocol
-	17, // 10: istio.networking.v1alpha3.TrafficPolicy.retry_budget:type_name -> istio.networking.v1alpha3.TrafficPolicy.RetryBudget
-	18, // 11: istio.networking.v1alpha3.Subset.labels:type_name -> istio.networking.v1alpha3.Subset.LabelsEntry
-	5,  // 12: istio.networking.v1alpha3.Subset.traffic_policy:type_name -> istio.networking.v1alpha3.TrafficPolicy
-	1,  // 13: istio.networking.v1alpha3.LoadBalancerSettings.simple:type_name -> istio.networking.v1alpha3.LoadBalancerSettings.SimpleLB
-	19, // 14: istio.networking.v1alpha3.LoadBalancerSettings.consistent_hash:type_name -> istio.networking.v1alpha3.LoadBalancerSettings.ConsistentHashLB
-	20, // 15: istio.networking.v1alpha3.LoadBalancerSettings.backend_utilization:type_name -> istio.networking.v1alpha3.LoadBalancerSettings.BackendUtilizationLB
-	12, // 16: istio.networking.v1alpha3.LoadBalancerSettings.locality_lb_setting:type_name -> istio.networking.v1alpha3.LocalityLoadBalancerSetting
-	13, // 17: istio.networking.v1alpha3.LoadBalancerSettings.zone_aware_lb_setting:type_name -> istio.networking.v1alpha3.ZoneAwareLoadBalancerSetting
-	34, // 18: istio.networking.v1alpha3.LoadBalancerSettings.warmup_duration_secs:type_name -> google.protobuf.Duration
-	8,  // 19: istio.networking.v1alpha3.LoadBalancerSettings.warmup:type_name -> istio.networking.v1alpha3.WarmupConfiguration
-	34, // 20: istio.networking.v1alpha3.WarmupConfiguration.duration:type_name -> google.protobuf.Duration
-	35, // 21: istio.networking.v1alpha3.WarmupConfiguration.minimum_percent:type_name -> google.protobuf.DoubleValue
-	35, // 22: istio.networking.v1alpha3.WarmupConfiguration.aggression:type_name -> google.protobuf.DoubleValue
-	25, // 23: istio.networking.v1alpha3.ConnectionPoolSettings.tcp:type_name -> istio.networking.v1alpha3.ConnectionPoolSettings.TCPSettings
-	26, // 24: istio.networking.v1alpha3.ConnectionPoolSettings.http:type_name -> istio.networking.v1alpha3.ConnectionPoolSettings.HTTPSettings
-	36, // 25: istio.networking.v1alpha3.OutlierDetection.consecutive_local_origin_failures:type_name -> google.protobuf.UInt32Value
-	36, // 26: istio.networking.v1alpha3.OutlierDetection.consecutive_gateway_errors:type_name -> google.protobuf.UInt32Value
-	36, // 27: istio.networking.v1alpha3.OutlierDetection.consecutive_5xx_errors:type_name -> google.protobuf.UInt32Value
-	34, // 28: istio.networking.v1alpha3.OutlierDetection.interval:type_name -> google.protobuf.Duration
-	34, // 29: istio.networking.v1alpha3.OutlierDetection.base_ejection_time:type_name -> google.protobuf.Duration
-	36, // 30: istio.networking.v1alpha3.OutlierDetection.failure_percentage_threshold:type_name -> google.protobuf.UInt32Value
-	3,  // 31: istio.networking.v1alpha3.ClientTLSSettings.mode:type_name -> istio.networking.v1alpha3.ClientTLSSettings.TLSmode
-	37, // 32: istio.networking.v1alpha3.ClientTLSSettings.insecure_skip_verify:type_name -> google.protobuf.BoolValue
-	29, // 33: istio.networking.v1alpha3.LocalityLoadBalancerSetting.distribute:type_name -> istio.networking.v1alpha3.LocalityLoadBalancerSetting.Distribute
-	30, // 34: istio.networking.v1alpha3.LocalityLoadBalancerSetting.failover:type_name -> istio.networking.v1alpha3.LocalityLoadBalancerSetting.Failover
-	37, // 35: istio.networking.v1alpha3.LocalityLoadBalancerSetting.enabled:type_name -> google.protobuf.BoolValue
-	37, // 36: istio.networking.v1alpha3.ZoneAwareLoadBalancerSetting.enabled:type_name -> google.protobuf.BoolValue
-	32, // 37: istio.networking.v1alpha3.ZoneAwareLoadBalancerSetting.failover:type_name -> istio.networking.v1alpha3.ZoneAwareLoadBalancerSetting.Failover
-	36, // 38: istio.networking.v1alpha3.ZoneAwareLoadBalancerSetting.min_cluster_size:type_name -> google.protobuf.UInt32Value
-	38, // 39: istio.networking.v1alpha3.TrafficPolicy.PortTrafficPolicy.port:type_name -> istio.networking.v1alpha3.PortSelector
-	7,  // 40: istio.networking.v1alpha3.TrafficPolicy.PortTrafficPolicy.load_balancer:type_name -> istio.networking.v1alpha3.LoadBalancerSettings
-	9,  // 41: istio.networking.v1alpha3.TrafficPolicy.PortTrafficPolicy.connection_pool:type_name -> istio.networking.v1alpha3.ConnectionPoolSettings
-	10, // 42: istio.networking.v1alpha3.TrafficPolicy.PortTrafficPolicy.outlier_detection:type_name -> istio.networking.v1alpha3.OutlierDetection
-	11, // 43: istio.networking.v1alpha3.TrafficPolicy.PortTrafficPolicy.tls:type_name -> istio.networking.v1alpha3.ClientTLSSettings
-	0,  // 44: istio.networking.v1alpha3.TrafficPolicy.ProxyProtocol.version:type_name -> istio.networking.v1alpha3.TrafficPolicy.ProxyProtocol.VERSION
-	35, // 45: istio.networking.v1alpha3.TrafficPolicy.RetryBudget.percent:type_name -> google.protobuf.DoubleValue
-	34, // 46: istio.networking.v1alpha3.TrafficPolicy.RetryBudget.budget_interval:type_name -> google.protobuf.Duration
-	23, // 47: istio.networking.v1alpha3.LoadBalancerSettings.ConsistentHashLB.http_cookie:type_name -> istio.networking.v1alpha3.LoadBalancerSettings.ConsistentHashLB.HTTPCookie
-	21, // 48: istio.networking.v1alpha3.LoadBalancerSettings.ConsistentHashLB.ring_hash:type_name -> istio.networking.v1alpha3.LoadBalancerSettings.ConsistentHashLB.RingHash
-	22, // 49: istio.networking.v1alpha3.LoadBalancerSettings.ConsistentHashLB.maglev:type_name -> istio.networking.v1alpha3.LoadBalancerSettings.ConsistentHashLB.MagLev
-	34, // 50: istio.networking.v1alpha3.LoadBalancerSettings.BackendUtilizationLB.weight_stabilization_period:type_name -> google.protobuf.Duration
-	34, // 51: istio.networking.v1alpha3.LoadBalancerSettings.BackendUtilizationLB.weight_expiration_period:type_name -> google.protobuf.Duration
-	34, // 52: istio.networking.v1alpha3.LoadBalancerSettings.BackendUtilizationLB.weight_update_period:type_name -> google.protobuf.Duration
-	34, // 53: istio.networking.v1alpha3.LoadBalancerSettings.ConsistentHashLB.HTTPCookie.ttl:type_name -> google.protobuf.Duration
-	24, // 54: istio.networking.v1alpha3.LoadBalancerSettings.ConsistentHashLB.HTTPCookie.attributes:type_name -> istio.networking.v1alpha3.LoadBalancerSettings.ConsistentHashLB.HTTPCookie.Attribute
-	34, // 55: istio.networking.v1alpha3.ConnectionPoolSettings.TCPSettings.connect_timeout:type_name -> google.protobuf.Duration
-	27, // 56: istio.networking.v1alpha3.ConnectionPoolSettings.TCPSettings.tcp_keepalive:type_name -> istio.networking.v1alpha3.ConnectionPoolSettings.TCPSettings.TcpKeepalive
-	34, // 57: istio.networking.v1alpha3.ConnectionPoolSettings.TCPSettings.max_connection_duration:type_name -> google.protobuf.Duration
-	34, // 58: istio.networking.v1alpha3.ConnectionPoolSettings.TCPSettings.idle_timeout:type_name -> google.protobuf.Duration
-	34, // 59: istio.networking.v1alpha3.ConnectionPoolSettings.HTTPSettings.idle_timeout:type_name -> google.protobuf.Duration
-	2,  // 60: istio.networking.v1alpha3.ConnectionPoolSettings.HTTPSettings.h2_upgrade_policy:type_name -> istio.networking.v1alpha3.ConnectionPoolSettings.HTTPSettings.H2UpgradePolicy
-	28, // 61: istio.networking.v1alpha3.ConnectionPoolSettings.HTTPSettings.http2_keep_alive:type_name -> istio.networking.v1alpha3.ConnectionPoolSettings.HTTPSettings.ConnectionKeepalive
-	34, // 62: istio.networking.v1alpha3.ConnectionPoolSettings.TCPSettings.TcpKeepalive.time:type_name -> google.protobuf.Duration
-	34, // 63: istio.networking.v1alpha3.ConnectionPoolSettings.TCPSettings.TcpKeepalive.interval:type_name -> google.protobuf.Duration
-	34, // 64: istio.networking.v1alpha3.ConnectionPoolSettings.HTTPSettings.ConnectionKeepalive.interval:type_name -> google.protobuf.Duration
-	34, // 65: istio.networking.v1alpha3.ConnectionPoolSettings.HTTPSettings.ConnectionKeepalive.timeout:type_name -> google.protobuf.Duration
-	31, // 66: istio.networking.v1alpha3.LocalityLoadBalancerSetting.Distribute.to:type_name -> istio.networking.v1alpha3.LocalityLoadBalancerSetting.Distribute.ToEntry
-	67, // [67:67] is the sub-list for method output_type
-	67, // [67:67] is the sub-list for method input_type
-	67, // [67:67] is the sub-list for extension type_name
-	67, // [67:67] is the sub-list for extension extendee
-	0,  // [0:67] is the sub-list for field type_name
+	14, // 6: istio.networking.v1alpha3.TrafficPolicy.tls:type_name -> istio.networking.v1alpha3.ClientTLSSettings
+	17, // 7: istio.networking.v1alpha3.TrafficPolicy.port_level_settings:type_name -> istio.networking.v1alpha3.TrafficPolicy.PortTrafficPolicy
+	18, // 8: istio.networking.v1alpha3.TrafficPolicy.tunnel:type_name -> istio.networking.v1alpha3.TrafficPolicy.TunnelSettings
+	19, // 9: istio.networking.v1alpha3.TrafficPolicy.proxy_protocol:type_name -> istio.networking.v1alpha3.TrafficPolicy.ProxyProtocol
+	20, // 10: istio.networking.v1alpha3.TrafficPolicy.retry_budget:type_name -> istio.networking.v1alpha3.TrafficPolicy.RetryBudget
+	11, // 11: istio.networking.v1alpha3.TrafficPolicy.admission_control:type_name -> istio.networking.v1alpha3.AdmissionControlPolicy
+	21, // 12: istio.networking.v1alpha3.Subset.labels:type_name -> istio.networking.v1alpha3.Subset.LabelsEntry
+	5,  // 13: istio.networking.v1alpha3.Subset.traffic_policy:type_name -> istio.networking.v1alpha3.TrafficPolicy
+	1,  // 14: istio.networking.v1alpha3.LoadBalancerSettings.simple:type_name -> istio.networking.v1alpha3.LoadBalancerSettings.SimpleLB
+	22, // 15: istio.networking.v1alpha3.LoadBalancerSettings.consistent_hash:type_name -> istio.networking.v1alpha3.LoadBalancerSettings.ConsistentHashLB
+	23, // 16: istio.networking.v1alpha3.LoadBalancerSettings.backend_utilization:type_name -> istio.networking.v1alpha3.LoadBalancerSettings.BackendUtilizationLB
+	15, // 17: istio.networking.v1alpha3.LoadBalancerSettings.locality_lb_setting:type_name -> istio.networking.v1alpha3.LocalityLoadBalancerSetting
+	16, // 18: istio.networking.v1alpha3.LoadBalancerSettings.zone_aware_lb_setting:type_name -> istio.networking.v1alpha3.ZoneAwareLoadBalancerSetting
+	40, // 19: istio.networking.v1alpha3.LoadBalancerSettings.warmup_duration_secs:type_name -> google.protobuf.Duration
+	8,  // 20: istio.networking.v1alpha3.LoadBalancerSettings.warmup:type_name -> istio.networking.v1alpha3.WarmupConfiguration
+	40, // 21: istio.networking.v1alpha3.WarmupConfiguration.duration:type_name -> google.protobuf.Duration
+	41, // 22: istio.networking.v1alpha3.WarmupConfiguration.minimum_percent:type_name -> google.protobuf.DoubleValue
+	41, // 23: istio.networking.v1alpha3.WarmupConfiguration.aggression:type_name -> google.protobuf.DoubleValue
+	28, // 24: istio.networking.v1alpha3.ConnectionPoolSettings.tcp:type_name -> istio.networking.v1alpha3.ConnectionPoolSettings.TCPSettings
+	29, // 25: istio.networking.v1alpha3.ConnectionPoolSettings.http:type_name -> istio.networking.v1alpha3.ConnectionPoolSettings.HTTPSettings
+	42, // 26: istio.networking.v1alpha3.OutlierDetection.consecutive_local_origin_failures:type_name -> google.protobuf.UInt32Value
+	42, // 27: istio.networking.v1alpha3.OutlierDetection.consecutive_gateway_errors:type_name -> google.protobuf.UInt32Value
+	42, // 28: istio.networking.v1alpha3.OutlierDetection.consecutive_5xx_errors:type_name -> google.protobuf.UInt32Value
+	40, // 29: istio.networking.v1alpha3.OutlierDetection.interval:type_name -> google.protobuf.Duration
+	40, // 30: istio.networking.v1alpha3.OutlierDetection.base_ejection_time:type_name -> google.protobuf.Duration
+	42, // 31: istio.networking.v1alpha3.OutlierDetection.failure_percentage_threshold:type_name -> google.protobuf.UInt32Value
+	12, // 32: istio.networking.v1alpha3.AdmissionControlPolicy.success_rate:type_name -> istio.networking.v1alpha3.SuccessRate
+	40, // 33: istio.networking.v1alpha3.SuccessRate.sampling_window:type_name -> google.protobuf.Duration
+	41, // 34: istio.networking.v1alpha3.SuccessRate.threshold:type_name -> google.protobuf.DoubleValue
+	41, // 35: istio.networking.v1alpha3.SuccessRate.aggression:type_name -> google.protobuf.DoubleValue
+	42, // 36: istio.networking.v1alpha3.SuccessRate.minimum_attempt_rate:type_name -> google.protobuf.UInt32Value
+	41, // 37: istio.networking.v1alpha3.SuccessRate.maximum_rejection_percent:type_name -> google.protobuf.DoubleValue
+	13, // 38: istio.networking.v1alpha3.SuccessRate.success_criteria:type_name -> istio.networking.v1alpha3.SuccessCriteria
+	32, // 39: istio.networking.v1alpha3.SuccessCriteria.http:type_name -> istio.networking.v1alpha3.SuccessCriteria.HttpCriteria
+	33, // 40: istio.networking.v1alpha3.SuccessCriteria.grpc:type_name -> istio.networking.v1alpha3.SuccessCriteria.GrpcCriteria
+	3,  // 41: istio.networking.v1alpha3.ClientTLSSettings.mode:type_name -> istio.networking.v1alpha3.ClientTLSSettings.TLSmode
+	43, // 42: istio.networking.v1alpha3.ClientTLSSettings.insecure_skip_verify:type_name -> google.protobuf.BoolValue
+	35, // 43: istio.networking.v1alpha3.LocalityLoadBalancerSetting.distribute:type_name -> istio.networking.v1alpha3.LocalityLoadBalancerSetting.Distribute
+	36, // 44: istio.networking.v1alpha3.LocalityLoadBalancerSetting.failover:type_name -> istio.networking.v1alpha3.LocalityLoadBalancerSetting.Failover
+	43, // 45: istio.networking.v1alpha3.LocalityLoadBalancerSetting.enabled:type_name -> google.protobuf.BoolValue
+	43, // 46: istio.networking.v1alpha3.ZoneAwareLoadBalancerSetting.enabled:type_name -> google.protobuf.BoolValue
+	38, // 47: istio.networking.v1alpha3.ZoneAwareLoadBalancerSetting.failover:type_name -> istio.networking.v1alpha3.ZoneAwareLoadBalancerSetting.Failover
+	42, // 48: istio.networking.v1alpha3.ZoneAwareLoadBalancerSetting.min_cluster_size:type_name -> google.protobuf.UInt32Value
+	44, // 49: istio.networking.v1alpha3.TrafficPolicy.PortTrafficPolicy.port:type_name -> istio.networking.v1alpha3.PortSelector
+	7,  // 50: istio.networking.v1alpha3.TrafficPolicy.PortTrafficPolicy.load_balancer:type_name -> istio.networking.v1alpha3.LoadBalancerSettings
+	9,  // 51: istio.networking.v1alpha3.TrafficPolicy.PortTrafficPolicy.connection_pool:type_name -> istio.networking.v1alpha3.ConnectionPoolSettings
+	10, // 52: istio.networking.v1alpha3.TrafficPolicy.PortTrafficPolicy.outlier_detection:type_name -> istio.networking.v1alpha3.OutlierDetection
+	14, // 53: istio.networking.v1alpha3.TrafficPolicy.PortTrafficPolicy.tls:type_name -> istio.networking.v1alpha3.ClientTLSSettings
+	11, // 54: istio.networking.v1alpha3.TrafficPolicy.PortTrafficPolicy.admission_control:type_name -> istio.networking.v1alpha3.AdmissionControlPolicy
+	0,  // 55: istio.networking.v1alpha3.TrafficPolicy.ProxyProtocol.version:type_name -> istio.networking.v1alpha3.TrafficPolicy.ProxyProtocol.VERSION
+	41, // 56: istio.networking.v1alpha3.TrafficPolicy.RetryBudget.percent:type_name -> google.protobuf.DoubleValue
+	40, // 57: istio.networking.v1alpha3.TrafficPolicy.RetryBudget.budget_interval:type_name -> google.protobuf.Duration
+	26, // 58: istio.networking.v1alpha3.LoadBalancerSettings.ConsistentHashLB.http_cookie:type_name -> istio.networking.v1alpha3.LoadBalancerSettings.ConsistentHashLB.HTTPCookie
+	24, // 59: istio.networking.v1alpha3.LoadBalancerSettings.ConsistentHashLB.ring_hash:type_name -> istio.networking.v1alpha3.LoadBalancerSettings.ConsistentHashLB.RingHash
+	25, // 60: istio.networking.v1alpha3.LoadBalancerSettings.ConsistentHashLB.maglev:type_name -> istio.networking.v1alpha3.LoadBalancerSettings.ConsistentHashLB.MagLev
+	40, // 61: istio.networking.v1alpha3.LoadBalancerSettings.BackendUtilizationLB.weight_stabilization_period:type_name -> google.protobuf.Duration
+	40, // 62: istio.networking.v1alpha3.LoadBalancerSettings.BackendUtilizationLB.weight_expiration_period:type_name -> google.protobuf.Duration
+	40, // 63: istio.networking.v1alpha3.LoadBalancerSettings.BackendUtilizationLB.weight_update_period:type_name -> google.protobuf.Duration
+	40, // 64: istio.networking.v1alpha3.LoadBalancerSettings.ConsistentHashLB.HTTPCookie.ttl:type_name -> google.protobuf.Duration
+	27, // 65: istio.networking.v1alpha3.LoadBalancerSettings.ConsistentHashLB.HTTPCookie.attributes:type_name -> istio.networking.v1alpha3.LoadBalancerSettings.ConsistentHashLB.HTTPCookie.Attribute
+	40, // 66: istio.networking.v1alpha3.ConnectionPoolSettings.TCPSettings.connect_timeout:type_name -> google.protobuf.Duration
+	30, // 67: istio.networking.v1alpha3.ConnectionPoolSettings.TCPSettings.tcp_keepalive:type_name -> istio.networking.v1alpha3.ConnectionPoolSettings.TCPSettings.TcpKeepalive
+	40, // 68: istio.networking.v1alpha3.ConnectionPoolSettings.TCPSettings.max_connection_duration:type_name -> google.protobuf.Duration
+	40, // 69: istio.networking.v1alpha3.ConnectionPoolSettings.TCPSettings.idle_timeout:type_name -> google.protobuf.Duration
+	40, // 70: istio.networking.v1alpha3.ConnectionPoolSettings.HTTPSettings.idle_timeout:type_name -> google.protobuf.Duration
+	2,  // 71: istio.networking.v1alpha3.ConnectionPoolSettings.HTTPSettings.h2_upgrade_policy:type_name -> istio.networking.v1alpha3.ConnectionPoolSettings.HTTPSettings.H2UpgradePolicy
+	31, // 72: istio.networking.v1alpha3.ConnectionPoolSettings.HTTPSettings.http2_keep_alive:type_name -> istio.networking.v1alpha3.ConnectionPoolSettings.HTTPSettings.ConnectionKeepalive
+	40, // 73: istio.networking.v1alpha3.ConnectionPoolSettings.TCPSettings.TcpKeepalive.time:type_name -> google.protobuf.Duration
+	40, // 74: istio.networking.v1alpha3.ConnectionPoolSettings.TCPSettings.TcpKeepalive.interval:type_name -> google.protobuf.Duration
+	40, // 75: istio.networking.v1alpha3.ConnectionPoolSettings.HTTPSettings.ConnectionKeepalive.interval:type_name -> google.protobuf.Duration
+	40, // 76: istio.networking.v1alpha3.ConnectionPoolSettings.HTTPSettings.ConnectionKeepalive.timeout:type_name -> google.protobuf.Duration
+	34, // 77: istio.networking.v1alpha3.SuccessCriteria.HttpCriteria.status_ranges:type_name -> istio.networking.v1alpha3.SuccessCriteria.HttpCriteria.StatusRange
+	37, // 78: istio.networking.v1alpha3.LocalityLoadBalancerSetting.Distribute.to:type_name -> istio.networking.v1alpha3.LocalityLoadBalancerSetting.Distribute.ToEntry
+	79, // [79:79] is the sub-list for method output_type
+	79, // [79:79] is the sub-list for method input_type
+	79, // [79:79] is the sub-list for extension type_name
+	79, // [79:79] is the sub-list for extension extendee
+	0,  // [0:79] is the sub-list for field type_name
 }
 
 func init() { file_networking_v1alpha3_destination_rule_proto_init() }
@@ -3780,7 +4275,10 @@ func file_networking_v1alpha3_destination_rule_proto_init() {
 		(*LoadBalancerSettings_ConsistentHash)(nil),
 		(*LoadBalancerSettings_BackendUtilization)(nil),
 	}
-	file_networking_v1alpha3_destination_rule_proto_msgTypes[15].OneofWrappers = []any{
+	file_networking_v1alpha3_destination_rule_proto_msgTypes[7].OneofWrappers = []any{
+		(*AdmissionControlPolicy_SuccessRate)(nil),
+	}
+	file_networking_v1alpha3_destination_rule_proto_msgTypes[18].OneofWrappers = []any{
 		(*LoadBalancerSettings_ConsistentHashLB_HttpHeaderName)(nil),
 		(*LoadBalancerSettings_ConsistentHashLB_HttpCookie)(nil),
 		(*LoadBalancerSettings_ConsistentHashLB_UseSourceIp)(nil),
@@ -3794,7 +4292,7 @@ func file_networking_v1alpha3_destination_rule_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_networking_v1alpha3_destination_rule_proto_rawDesc), len(file_networking_v1alpha3_destination_rule_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   29,
+			NumMessages:   35,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

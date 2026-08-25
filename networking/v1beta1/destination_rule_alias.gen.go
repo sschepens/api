@@ -371,6 +371,66 @@ const ConnectionPoolSettings_HTTPSettings_UPGRADE ConnectionPoolSettings_HTTPSet
 // ```
 type OutlierDetection = v1alpha3.OutlierDetection
 
+// AdmissionControlPolicy configures success-rate-based admission control for
+// requests to an upstream service. It is a client-side, per-upstream resilience
+// control that runs in the caller's sidecar after upstream-cluster selection.
+// When the observed success rate of the selected cluster drops below a
+// threshold, the sidecar probabilistically rejects requests locally with a
+// `503` before dispatching them over the network, giving a degrading upstream
+// room to recover. State is tracked independently per upstream cluster.
+//
+// This is the client-side sibling of `OutlierDetection`: where outlier
+// detection ejects individual unhealthy endpoints from the load balancing pool,
+// admission control throttles the volume of requests the caller sends when
+// the upstream as a whole is failing.
+//
+// ```yaml
+// apiVersion: networking.istio.io/v1
+// kind: DestinationRule
+// metadata:
+//
+//	name: checkout-to-payments
+//
+// spec:
+//
+//	host: payments.payments.svc.cluster.local
+//	trafficPolicy:
+//	  admissionControl:
+//	    successRate:
+//	      samplingWindow: 30s
+//	      threshold: 95
+//	      aggression: 1
+//	      minimumAttemptRate: 10
+//	      maximumRejectionPercent: 80
+//
+// ```
+type AdmissionControlPolicy = v1alpha3.AdmissionControlPolicy
+
+// Shed load based on the observed success rate of the upstream service.
+type AdmissionControlPolicy_SuccessRate = v1alpha3.AdmissionControlPolicy_SuccessRate
+
+// SuccessRate configures admission control driven by the success rate observed
+// over a sliding time window. Each upstream attempt is classified as a success
+// or a failure according to `success_criteria` (Envoy's HTTP/gRPC defaults are
+// used when it is omitted).
+type SuccessRate = v1alpha3.SuccessRate
+
+// SuccessCriteria classifies which upstream responses count as a success when
+// computing the observed success rate. HTTP and gRPC are configured
+// independently, which matters for clusters that serve both protocols or whose
+// protocol is inferred.
+type SuccessCriteria = v1alpha3.SuccessCriteria
+
+// HttpCriteria defines the HTTP status codes that are treated as successful.
+type SuccessCriteria_HttpCriteria = v1alpha3.SuccessCriteria_HttpCriteria
+
+// StatusRange is a half-open range of HTTP status codes: `start` is
+// inclusive and `end` is exclusive, i.e. `[start, end)`.
+type SuccessCriteria_HttpCriteria_StatusRange = v1alpha3.SuccessCriteria_HttpCriteria_StatusRange
+
+// GrpcCriteria defines the gRPC status codes that are treated as successful.
+type SuccessCriteria_GrpcCriteria = v1alpha3.SuccessCriteria_GrpcCriteria
+
 // SSL/TLS related settings for upstream connections. See Envoy's [TLS
 // context](https://www.envoyproxy.io/docs/envoy/latest/api-v3/extensions/transport_sockets/tls/v3/common.proto.html#common-tls-configuration)
 // for more details. These settings are common to both HTTP and TCP upstreams.
