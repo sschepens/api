@@ -1794,8 +1794,12 @@ spec:
 <section>
 <p>SuccessRate configures admission control driven by the success rate observed
 over a sliding time window. Each upstream attempt is classified as a success
-or a failure according to <code>success_criteria</code> (Envoy&rsquo;s HTTP/gRPC defaults are
-used when it is omitted).</p>
+or a failure according to <code>success_criteria</code>. If <code>success_criteria</code> (or its
+<code>http</code>/<code>grpc</code> block) is omitted, Envoy&rsquo;s own default applies: for HTTP, any
+status code below 500 is a success; for gRPC, OK, CANCELLED, UNKNOWN,
+INVALID_ARGUMENT, NOT_FOUND, ALREADY_EXISTS, UNAUTHENTICATED,
+FAILED_PRECONDITION, OUT_OF_RANGE, PERMISSION_DENIED, and UNIMPLEMENTED are
+successes.</p>
 
 <table class="message-fields">
 <thead>
@@ -1867,10 +1871,15 @@ rate keeps falling. Caps the rejection probability. Must be in the range
 </div></td>
 <td>
 <p>Criteria that classify an upstream response as a success for the purpose of
-the success-rate signal. If omitted, Envoy&rsquo;s protocol defaults are used
-(HTTP: statuses below 500 are successful; gRPC: the standard success codes).
-HTTP and gRPC criteria are independent; configuring one leaves the other at
-its default.</p>
+the success-rate signal. HTTP and gRPC criteria are independent; configuring
+one leaves the other at its default. If a block is omitted, Envoy&rsquo;s own
+default applies for that protocol:</p>
+<ul>
+<li>HTTP: any status code below 500 is a success.</li>
+<li>gRPC: OK, CANCELLED, UNKNOWN, INVALID_ARGUMENT, NOT_FOUND, ALREADY_EXISTS,
+UNAUTHENTICATED, FAILED_PRECONDITION, OUT_OF_RANGE, PERMISSION_DENIED, and
+UNIMPLEMENTED are successes.</li>
+</ul>
 
 </td>
 </tr>

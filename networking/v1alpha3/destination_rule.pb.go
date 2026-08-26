@@ -1509,8 +1509,12 @@ func (*AdmissionControlPolicy_SuccessRate) isAdmissionControlPolicy_Strategy() {
 
 // SuccessRate configures admission control driven by the success rate observed
 // over a sliding time window. Each upstream attempt is classified as a success
-// or a failure according to `success_criteria` (Envoy's HTTP/gRPC defaults are
-// used when it is omitted).
+// or a failure according to `success_criteria`. If `success_criteria` (or its
+// `http`/`grpc` block) is omitted, Envoy's own default applies: for HTTP, any
+// status code below 500 is a success; for gRPC, OK, CANCELLED, UNKNOWN,
+// INVALID_ARGUMENT, NOT_FOUND, ALREADY_EXISTS, UNAUTHENTICATED,
+// FAILED_PRECONDITION, OUT_OF_RANGE, PERMISSION_DENIED, and UNIMPLEMENTED are
+// successes.
 type SuccessRate struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The sliding time window over which the success rate is calculated. The
@@ -1537,10 +1541,13 @@ type SuccessRate struct {
 	// [0, 100]. Leave unset to use Envoy's default of 80.
 	MaximumRejectionPercent *wrappers.DoubleValue `protobuf:"bytes,5,opt,name=maximum_rejection_percent,json=maximumRejectionPercent,proto3" json:"maximum_rejection_percent,omitempty"`
 	// Criteria that classify an upstream response as a success for the purpose of
-	// the success-rate signal. If omitted, Envoy's protocol defaults are used
-	// (HTTP: statuses below 500 are successful; gRPC: the standard success codes).
-	// HTTP and gRPC criteria are independent; configuring one leaves the other at
-	// its default.
+	// the success-rate signal. HTTP and gRPC criteria are independent; configuring
+	// one leaves the other at its default. If a block is omitted, Envoy's own
+	// default applies for that protocol:
+	//   - HTTP: any status code below 500 is a success.
+	//   - gRPC: OK, CANCELLED, UNKNOWN, INVALID_ARGUMENT, NOT_FOUND, ALREADY_EXISTS,
+	//     UNAUTHENTICATED, FAILED_PRECONDITION, OUT_OF_RANGE, PERMISSION_DENIED, and
+	//     UNIMPLEMENTED are successes.
 	SuccessCriteria *SuccessCriteria `protobuf:"bytes,6,opt,name=success_criteria,json=successCriteria,proto3" json:"success_criteria,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache

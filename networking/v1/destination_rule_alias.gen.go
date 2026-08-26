@@ -411,8 +411,12 @@ type AdmissionControlPolicy_SuccessRate = v1alpha3.AdmissionControlPolicy_Succes
 
 // SuccessRate configures admission control driven by the success rate observed
 // over a sliding time window. Each upstream attempt is classified as a success
-// or a failure according to `success_criteria` (Envoy's HTTP/gRPC defaults are
-// used when it is omitted).
+// or a failure according to `success_criteria`. If `success_criteria` (or its
+// `http`/`grpc` block) is omitted, Envoy's own default applies: for HTTP, any
+// status code below 500 is a success; for gRPC, OK, CANCELLED, UNKNOWN,
+// INVALID_ARGUMENT, NOT_FOUND, ALREADY_EXISTS, UNAUTHENTICATED,
+// FAILED_PRECONDITION, OUT_OF_RANGE, PERMISSION_DENIED, and UNIMPLEMENTED are
+// successes.
 type SuccessRate = v1alpha3.SuccessRate
 
 // SuccessCriteria classifies which upstream responses count as a success when
