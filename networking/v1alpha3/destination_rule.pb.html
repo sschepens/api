@@ -6,7 +6,7 @@ layout: protoc-gen-docs
 generator: protoc-gen-docs
 schema: istio.networking.v1alpha3.DestinationRule
 aliases: [/docs/reference/config/networking/v1alpha3/destination-rule]
-number_of_entries: 32
+number_of_entries: 38
 ---
 <p><code>DestinationRule</code> defines policies that apply to traffic intended for a
 service after routing has occurred. These rules specify configuration
@@ -278,6 +278,20 @@ Tunnel settings can be applied to TCP or TLS routes and can&rsquo;t be applied t
 
 </td>
 </tr>
+<tr id="TrafficPolicy-admission_control">
+<td><div class="field"><div class="name"><code><a href="#TrafficPolicy-admission_control">admissionControl</a></code></div>
+<div class="type"><a href="#AdmissionControlPolicy">AdmissionControlPolicy</a></div>
+</div></td>
+<td>
+<p>Admission control based on the observed success rate of the upstream
+service. When the success rate drops below the configured threshold, the
+caller&rsquo;s sidecar probabilistically rejects requests locally (a local <code>503</code>,
+before network dispatch) to protect a degrading upstream. State is kept
+independently per upstream cluster. This is the client-side sibling of
+<code>outlierDetection</code>.</p>
+
+</td>
+</tr>
 </tbody>
 </table>
 </section>
@@ -336,6 +350,16 @@ on which this policy is being applied.</p>
 </div></td>
 <td>
 <p>TLS related settings for connections to the upstream service.</p>
+
+</td>
+</tr>
+<tr id="TrafficPolicy-PortTrafficPolicy-admission_control">
+<td><div class="field"><div class="name"><code><a href="#TrafficPolicy-PortTrafficPolicy-admission_control">admissionControl</a></code></div>
+<div class="type"><a href="#AdmissionControlPolicy">AdmissionControlPolicy</a></div>
+</div></td>
+<td>
+<p>Admission control based on the observed success rate of the upstream
+service, applied to this specific port.</p>
 
 </td>
 </tr>
@@ -1711,6 +1735,273 @@ ejected. Defaults to 85.</p>
 <p>Unlike <code>consecutive5xxErrors</code> and <code>consecutiveGatewayErrors</code>, this does not require failures
 to occur back-to-back, so it will still eject a host whose failure rate is high but whose
 errors are interspersed with successful requests.</p>
+
+</td>
+</tr>
+</tbody>
+</table>
+</section>
+<h2 id="AdmissionControlPolicy">AdmissionControlPolicy</h2>
+<section>
+<p>AdmissionControlPolicy configures success-rate-based admission control for
+requests to an upstream service. It is a client-side, per-upstream resilience
+control that runs in the caller&rsquo;s sidecar after upstream-cluster selection.
+When the observed success rate of the selected cluster drops below a
+threshold, the sidecar probabilistically rejects requests locally with a
+<code>503</code> before dispatching them over the network, giving a degrading upstream
+room to recover. State is tracked independently per upstream cluster.</p>
+<p>This is the client-side sibling of <code>OutlierDetection</code>: where outlier
+detection ejects individual unhealthy endpoints from the load balancing pool,
+admission control throttles the volume of requests the caller sends when
+the upstream as a whole is failing.</p>
+<pre><code class="language-yaml">apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: checkout-to-payments
+spec:
+  host: payments.payments.svc.cluster.local
+  trafficPolicy:
+    admissionControl:
+      successRate:
+        samplingWindow: 30s
+        threshold: 95
+        aggression: 1
+        minimumAttemptRate: 10
+        maximumRejectionPercent: 80
+</code></pre>
+
+<table class="message-fields">
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr id="AdmissionControlPolicy-success_rate" class="oneof oneof-start">
+<td><div class="field"><div class="name"><code><a href="#AdmissionControlPolicy-success_rate">successRate</a></code></div>
+<div class="type"><a href="#SuccessRate">SuccessRate (oneof)</a></div>
+</div></td>
+<td>
+<p>Shed load based on the observed success rate of the upstream service.</p>
+
+</td>
+</tr>
+</tbody>
+</table>
+</section>
+<h2 id="SuccessRate">SuccessRate</h2>
+<section>
+<p>SuccessRate configures admission control driven by the success rate observed
+over a sliding time window. Each upstream attempt is classified as a success
+or a failure according to <code>success_criteria</code>. If <code>success_criteria</code> (or its
+<code>http</code>/<code>grpc</code> block) is omitted, Envoy&rsquo;s own default applies: for HTTP, any
+status code below 500 is a success; for gRPC, OK, CANCELLED, UNKNOWN,
+INVALID_ARGUMENT, NOT_FOUND, ALREADY_EXISTS, UNAUTHENTICATED,
+FAILED_PRECONDITION, OUT_OF_RANGE, PERMISSION_DENIED, and UNIMPLEMENTED are
+successes.</p>
+
+<table class="message-fields">
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr id="SuccessRate-sampling_window">
+<td><div class="field"><div class="name"><code><a href="#SuccessRate-sampling_window">samplingWindow</a></code></div>
+<div class="type"><a href="https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#duration">Duration</a></div>
+</div></td>
+<td>
+<p>The sliding time window over which the success rate is calculated. The
+window is rounded to the nearest second. Defaults to 30s.</p>
+
+</td>
+</tr>
+<tr id="SuccessRate-threshold">
+<td><div class="field"><div class="name"><code><a href="#SuccessRate-threshold">threshold</a></code></div>
+<div class="type"><a href="https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#doublevalue">DoubleValue</a></div>
+</div></td>
+<td>
+<p>The success rate, as a percentage, at or below which requests begin to be
+rejected. Success rates above this threshold result in no shedding. Must be
+in the range [0, 100]. Leave unset to use Envoy&rsquo;s default of 95.</p>
+
+</td>
+</tr>
+<tr id="SuccessRate-aggression">
+<td><div class="field"><div class="name"><code><a href="#SuccessRate-aggression">aggression</a></code></div>
+<div class="type"><a href="https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#doublevalue">DoubleValue</a></div>
+</div></td>
+<td>
+<p>Controls how aggressively requests are shed as the success rate drops below
+<code>threshold</code>. A value of 1 produces a linear increase in rejection
+probability as the success rate falls; higher values shed more aggressively.
+Values below 1 are treated as 1. Leave unset to use Envoy&rsquo;s default of 1.</p>
+
+</td>
+</tr>
+<tr id="SuccessRate-minimum_attempt_rate">
+<td><div class="field"><div class="name"><code><a href="#SuccessRate-minimum_attempt_rate">minimumAttemptRate</a></code></div>
+<div class="type"><a href="#google-protobuf-UInt32Value">UInt32Value</a></div>
+</div></td>
+<td>
+<p>The minimum average request rate (requests per second) over the sampling
+window required before any shedding occurs. Below this rate nothing is shed,
+even if the success rate is below <code>threshold</code>. This avoids over-reacting
+to low-traffic noise. Leave unset to use Envoy&rsquo;s default of 0 (no minimum).</p>
+
+</td>
+</tr>
+<tr id="SuccessRate-maximum_rejection_percent">
+<td><div class="field"><div class="name"><code><a href="#SuccessRate-maximum_rejection_percent">maximumRejectionPercent</a></code></div>
+<div class="type"><a href="https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#doublevalue">DoubleValue</a></div>
+</div></td>
+<td>
+<p>The maximum percentage of requests that may be shed, even as the success
+rate keeps falling. Caps the rejection probability. Must be in the range
+[0, 100]. Leave unset to use Envoy&rsquo;s default of 80.</p>
+
+</td>
+</tr>
+<tr id="SuccessRate-success_criteria">
+<td><div class="field"><div class="name"><code><a href="#SuccessRate-success_criteria">successCriteria</a></code></div>
+<div class="type"><a href="#SuccessCriteria">SuccessCriteria</a></div>
+</div></td>
+<td>
+<p>Criteria that classify an upstream response as a success for the purpose of
+the success-rate signal. HTTP and gRPC criteria are independent; configuring
+one leaves the other at its default. If a block is omitted, Envoy&rsquo;s own
+default applies for that protocol:</p>
+<ul>
+<li>HTTP: any status code below 500 is a success.</li>
+<li>gRPC: OK, CANCELLED, UNKNOWN, INVALID_ARGUMENT, NOT_FOUND, ALREADY_EXISTS,
+UNAUTHENTICATED, FAILED_PRECONDITION, OUT_OF_RANGE, PERMISSION_DENIED, and
+UNIMPLEMENTED are successes.</li>
+</ul>
+
+</td>
+</tr>
+</tbody>
+</table>
+</section>
+<h2 id="SuccessCriteria">SuccessCriteria</h2>
+<section>
+<p>SuccessCriteria classifies which upstream responses count as a success when
+computing the observed success rate. HTTP and gRPC are configured
+independently, which matters for clusters that serve both protocols or whose
+protocol is inferred.</p>
+
+<table class="message-fields">
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr id="SuccessCriteria-http">
+<td><div class="field"><div class="name"><code><a href="#SuccessCriteria-http">http</a></code></div>
+<div class="type"><a href="#SuccessCriteria-HttpCriteria">HttpCriteria</a></div>
+</div></td>
+<td>
+<p>Success criteria for HTTP responses.</p>
+
+</td>
+</tr>
+<tr id="SuccessCriteria-grpc">
+<td><div class="field"><div class="name"><code><a href="#SuccessCriteria-grpc">grpc</a></code></div>
+<div class="type"><a href="#SuccessCriteria-GrpcCriteria">GrpcCriteria</a></div>
+</div></td>
+<td>
+<p>Success criteria for gRPC responses.</p>
+
+</td>
+</tr>
+</tbody>
+</table>
+</section>
+<h3 id="SuccessCriteria-HttpCriteria">HttpCriteria</h3>
+<section>
+<p>HttpCriteria defines the HTTP status codes that are treated as successful.</p>
+
+<table class="message-fields">
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr id="SuccessCriteria-HttpCriteria-status_ranges">
+<td><div class="field"><div class="name"><code><a href="#SuccessCriteria-HttpCriteria-status_ranges">statusRanges</a></code></div>
+<div class="type"><a href="#SuccessCriteria-HttpCriteria-StatusRange">StatusRange[]</a></div>
+</div></td>
+<td>
+<p>The set of HTTP status ranges considered successful. If present, it must
+contain at least one range.</p>
+
+</td>
+</tr>
+</tbody>
+</table>
+</section>
+<h4 id="SuccessCriteria-HttpCriteria-StatusRange">StatusRange</h4>
+<section>
+<p>StatusRange is a half-open range of HTTP status codes: <code>start</code> is
+inclusive and <code>end</code> is exclusive, i.e. <code>[start, end)</code>.</p>
+
+<table class="message-fields">
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr id="SuccessCriteria-HttpCriteria-StatusRange-start">
+<td><div class="field"><div class="name"><code><a href="#SuccessCriteria-HttpCriteria-StatusRange-start">start</a></code></div>
+<div class="type">uint32</div>
+</div></td>
+<td>
+<p>Inclusive lower bound of the range. Must be in the range [100, 600].</p>
+
+</td>
+</tr>
+<tr id="SuccessCriteria-HttpCriteria-StatusRange-end">
+<td><div class="field"><div class="name"><code><a href="#SuccessCriteria-HttpCriteria-StatusRange-end">end</a></code></div>
+<div class="type">uint32</div>
+</div></td>
+<td>
+<p>Exclusive upper bound of the range. Must be in the range [100, 600] and
+strictly greater than <code>start</code>.</p>
+
+</td>
+</tr>
+</tbody>
+</table>
+</section>
+<h3 id="SuccessCriteria-GrpcCriteria">GrpcCriteria</h3>
+<section>
+<p>GrpcCriteria defines the gRPC status codes that are treated as successful.</p>
+
+<table class="message-fields">
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr id="SuccessCriteria-GrpcCriteria-status_codes">
+<td><div class="field"><div class="name"><code><a href="#SuccessCriteria-GrpcCriteria-status_codes">statusCodes</a></code></div>
+<div class="type">string[]</div>
+</div></td>
+<td>
+<p>Canonical gRPC status names such as <code>OK</code>, <code>NOT_FOUND</code>, or <code>UNAVAILABLE</code>.
+Istiod validates these names and translates them to Envoy numeric codes.
+If present, it must contain at least one valid name.</p>
 
 </td>
 </tr>
