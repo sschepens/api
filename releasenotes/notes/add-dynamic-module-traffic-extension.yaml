@@ -1,0 +1,8 @@
+apiVersion: release-notes/v2
+kind: feature
+area: traffic-management
+issue: []
+releaseNotes:
+- |
+    **Added** `DynamicModuleConfig` to `TrafficExtension` for configuring Envoy dynamic
+    module filters from local files, HTTP(S) URLs, or OCI images.

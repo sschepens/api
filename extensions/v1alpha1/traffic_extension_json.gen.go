@@ -28,6 +28,17 @@ func (this *WasmConfig) UnmarshalJSON(b []byte) error {
 	return TrafficExtensionUnmarshaler.Unmarshal(bytes.NewReader(b), this)
 }
 
+// MarshalJSON is a custom marshaler for DynamicModuleConfig
+func (this *DynamicModuleConfig) MarshalJSON() ([]byte, error) {
+	str, err := TrafficExtensionMarshaler.MarshalToString(this)
+	return []byte(str), err
+}
+
+// UnmarshalJSON is a custom unmarshaler for DynamicModuleConfig
+func (this *DynamicModuleConfig) UnmarshalJSON(b []byte) error {
+	return TrafficExtensionUnmarshaler.Unmarshal(bytes.NewReader(b), this)
+}
+
 // MarshalJSON is a custom marshaler for LuaConfig
 func (this *LuaConfig) MarshalJSON() ([]byte, error) {
 	str, err := TrafficExtensionMarshaler.MarshalToString(this)

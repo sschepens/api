@@ -16,20 +16,20 @@ syntax = "proto3";
 
 // $schema: istio.extensions.v1alpha1.TrafficExtension
 // $title: Traffic Extension
-// $description: Extend the functionality provided by the Istio proxy through WebAssembly or Lua filters.
+// $description: Extend the functionality provided by the Istio proxy through WebAssembly, Lua, or DynamicModule filters.
 // $location: https://istio.io/docs/reference/config/proxy_extensions/traffic_extension.html
 // $aliases: [/docs/reference/config/extensions/v1alpha1/traffic_extension]
 
 // TrafficExtension provides a mechanism to extend the functionality provided by
-// the Istio proxy through WebAssembly or Lua filters.
+// the Istio proxy through WebAssembly, Lua, or DynamicModule filters.
 //
 // This API supersedes WasmPlugin by providing a unified mechanism for configuring
-// multiple extension types (WebAssembly and Lua) while maintaining consistent
+// multiple extension types (WebAssembly, Lua, and DynamicModule) while maintaining consistent
 // targeting and configuration patterns.
 //
 // The order of execution (as part of Envoy's filter chain) is determined by
 // phase and priority settings, allowing the configuration of complex
-// interactions between user-supplied WebAssembly or Lua and Istio's internal
+// interactions between user-supplied extensions and Istio's internal
 // filters.
 //
 // Examples:
@@ -296,6 +296,7 @@ option go_package = "istio.io/api/extensions/v1alpha1";
 // +cue-gen:TrafficExtension:releaseChannel:extended
 // +cue-gen:TrafficExtension:resource:categories=istio-io,extensions-istio-io
 // +cue-gen:TrafficExtension:preserveUnknownFields:wasm.pluginConfig
+// +cue-gen:TrafficExtension:preserveUnknownFields:dynamicModule.pluginConfig
 // +cue-gen:TrafficExtension:printerColumn:name=Age,type=date,JSONPath=.metadata.creationTimestamp,description="CreationTimestamp is a timestamp representing the server time when this object was created. It is not guaranteed to be set in happens-before order across separate operations. Clients may not set this value. It is represented in RFC3339 form and is in UTC. Populated by the system. Read-only. Null for lists. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#metadata"
 // -->
 //
@@ -306,7 +307,7 @@ option go_package = "istio.io/api/extensions/v1alpha1";
 // +k8s:deepcopy-gen=true
 // -->
 // +kubebuilder:validation:XValidation:message="only one of targetRefs or selector can be set",rule="(has(self.selector)?1:0)+(has(self.targetRefs)?1:0)<=1"
-// +kubebuilder:validation:XValidation:message="exactly one of wasm or lua must be set",rule="has(self.wasm) != has(self.lua)"
+// +kubebuilder:validation:XValidation:message="exactly one of wasm, lua or dynamicModule must be set",rule="(has(self.wasm)?1:0)+(has(self.lua)?1:0)+(has(self.dynamicModule)?1:0)==1"
 message TrafficExtension {
   // ExecutionPhase specifies where in the filter chain a `TrafficExtension` is injected.
   enum ExecutionPhase {
@@ -369,13 +370,16 @@ message TrafficExtension {
   // the traffic passes the TrafficExtension.
   repeated TrafficSelector match = 5;
 
-  // Exactly one of `wasm` or `lua` must be set.
+  // Exactly one of `wasm`, `lua`, or `dynamicModule` must be set.
   oneof filter_config {
     // WebAssembly filter configuration.
     WasmConfig wasm = 6;
 
     // Lua filter configuration.
     LuaConfig lua = 7;
+
+    // DynamicModule filter configuration.
+    DynamicModuleConfig dynamic_module = 8;
   }
 }
 
@@ -476,6 +480,90 @@ message WasmConfig {
 
   // Specifies the type of Wasm Extension to be used.
   PluginType type = 10;
+}
+
+// DynamicModuleConfig configures an Envoy DynamicModule filter.
+// See the [Envoy Dynamic Modules documentation](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/dynamic_modules.html)
+// for an overview and available SDKs.
+//
+// DynamicModules are native shared libraries that must be compatible with the
+// proxy's DynamicModule ABI. See Envoy's [ABI compatibility policy](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/dynamic_modules.html#compatibility)
+// for stability guarantees and SDK version requirements.
+//
+// Example using a local shared library:
+//
+// ```yaml
+// dynamicModule:
+//   url: file:///opt/filters/libmy_filter.so
+//   pluginName: my-filter
+//   pluginConfig:
+//     key: value
+// ```
+//
+// Example using a remote OCI image:
+//
+// ```yaml
+// dynamicModule:
+//   url: oci://registry.example.com/filters/my-filter:v1.0.0
+//   imagePullPolicy: IfNotPresent
+//   imagePullSecret: registry-secret
+//   pluginName: my-filter
+//   pluginConfig:
+//     key: value
+//   type: HTTP
+// ```
+message DynamicModuleConfig {
+  // URL of a DynamicModule library or OCI container. If no scheme is present,
+  // defaults to `oci://`, referencing an OCI image. Other valid schemes
+  // are `file://` for referencing .so shared library files present locally
+  // within the proxy container, and `http[s]://` for .so shared library files
+  // hosted remotely.
+  //
+  // +kubebuilder:validation:MinLength=1
+  // +kubebuilder:validation:XValidation:message="url must have schema one of [http, https, file, oci]",rule="isURL(self) ? (url(self).getScheme() in ['', 'http', 'https', 'file', 'oci']) : (isURL('http://' + self) && url('http://' + self).getScheme() in ['', 'http', 'https', 'file', 'oci'])"
+  string url = 1 [(google.api.field_behavior) = REQUIRED];
+
+  // SHA256 checksum that will be used to verify the DynamicModule library or OCI container.
+  // If the `url` field already references a SHA256 (using the `@sha256:`
+  // notation), it must match the value of this field. If an OCI image is
+  // referenced by tag and this field is set, its checksum will be verified
+  // against the contents of this field after pulling.
+  // +kubebuilder:validation:Pattern="(^$|^[a-f0-9]{64}$)"
+  string sha256 = 2;
+
+  // The pull behaviour to be applied when fetching a DynamicModule library by either
+  // OCI image or `http/https`. Only relevant when referencing a DynamicModule library without
+  // any digest, including the digest in OCI image URL or `sha256` field.
+  // Defaults to `IfNotPresent`, except when an OCI image is referenced in the `url`
+  // and the `latest` tag is used, in which case `Always` is the default,
+  // mirroring Kubernetes behaviour.
+  PullPolicy image_pull_policy = 3;
+
+  // Credentials to use for OCI image pulling.
+  // Name of a Kubernetes Secret in the same namespace as the `TrafficExtension` that
+  // contains a Docker pull secret which is to be used to authenticate
+  // against the registry when pulling the image.
+  // +kubebuilder:validation:MinLength=1
+  // +kubebuilder:validation:MaxLength=253
+  string image_pull_secret = 4;
+
+  // $hide_from_docs
+  // Public key for verifying signed OCI images or DynamicModule.
+  // Reserved for future use; signature verification is not currently implemented.
+  string verification_key = 5;
+
+  // The configuration passed to the filter implementation as JSON.
+  google.protobuf.Struct plugin_config = 6;
+
+  // The name of the filter implementation within the DynamicModule library.
+  // Passed to Envoy as `filter_name` together with `plugin_config` to select
+  // and configure the filter implementation.
+  // +kubebuilder:validation:MaxLength=256
+  // +kubebuilder:validation:MinLength=1
+  string plugin_name = 7;
+
+  // Specifies the type of DynamicModule extension to be used.
+  PluginType type = 8;
 }
 
 // LuaConfig configures a Lua filter.

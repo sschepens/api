@@ -20,20 +20,20 @@
 
 // $schema: istio.extensions.v1alpha1.TrafficExtension
 // $title: Traffic Extension
-// $description: Extend the functionality provided by the Istio proxy through WebAssembly or Lua filters.
+// $description: Extend the functionality provided by the Istio proxy through WebAssembly, Lua, or DynamicModule filters.
 // $location: https://istio.io/docs/reference/config/proxy_extensions/traffic_extension.html
 // $aliases: [/docs/reference/config/extensions/v1alpha1/traffic_extension]
 
 // TrafficExtension provides a mechanism to extend the functionality provided by
-// the Istio proxy through WebAssembly or Lua filters.
+// the Istio proxy through WebAssembly, Lua, or DynamicModule filters.
 //
 // This API supersedes WasmPlugin by providing a unified mechanism for configuring
-// multiple extension types (WebAssembly and Lua) while maintaining consistent
+// multiple extension types (WebAssembly, Lua, and DynamicModule) while maintaining consistent
 // targeting and configuration patterns.
 //
 // The order of execution (as part of Envoy's filter chain) is determined by
 // phase and priority settings, allowing the configuration of complex
-// interactions between user-supplied WebAssembly or Lua and Istio's internal
+// interactions between user-supplied extensions and Istio's internal
 // filters.
 //
 // Examples:
@@ -370,6 +370,7 @@ func (TrafficExtension_ExecutionPhase) EnumDescriptor() ([]byte, []int) {
 // +cue-gen:TrafficExtension:releaseChannel:extended
 // +cue-gen:TrafficExtension:resource:categories=istio-io,extensions-istio-io
 // +cue-gen:TrafficExtension:preserveUnknownFields:wasm.pluginConfig
+// +cue-gen:TrafficExtension:preserveUnknownFields:dynamicModule.pluginConfig
 // +cue-gen:TrafficExtension:printerColumn:name=Age,type=date,JSONPath=.metadata.creationTimestamp,description="CreationTimestamp is a timestamp representing the server time when this object was created. It is not guaranteed to be set in happens-before order across separate operations. Clients may not set this value. It is represented in RFC3339 form and is in UTC. Populated by the system. Read-only. Null for lists. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#metadata"
 // -->
 //
@@ -380,7 +381,7 @@ func (TrafficExtension_ExecutionPhase) EnumDescriptor() ([]byte, []int) {
 // +k8s:deepcopy-gen=true
 // -->
 // +kubebuilder:validation:XValidation:message="only one of targetRefs or selector can be set",rule="(has(self.selector)?1:0)+(has(self.targetRefs)?1:0)<=1"
-// +kubebuilder:validation:XValidation:message="exactly one of wasm or lua must be set",rule="has(self.wasm) != has(self.lua)"
+// +kubebuilder:validation:XValidation:message="exactly one of wasm, lua or dynamicModule must be set",rule="(has(self.wasm)?1:0)+(has(self.lua)?1:0)+(has(self.dynamicModule)?1:0)==1"
 type TrafficExtension struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Optional. Criteria used to select the specific set of pods/VMs on which
@@ -422,12 +423,13 @@ type TrafficExtension struct {
 	// If a traffic satisfies any of TrafficSelectors,
 	// the traffic passes the TrafficExtension.
 	Match []*TrafficSelector `protobuf:"bytes,5,rep,name=match,proto3" json:"match,omitempty"`
-	// Exactly one of `wasm` or `lua` must be set.
+	// Exactly one of `wasm`, `lua`, or `dynamicModule` must be set.
 	//
 	// Types that are valid to be assigned to FilterConfig:
 	//
 	//	*TrafficExtension_Wasm
 	//	*TrafficExtension_Lua
+	//	*TrafficExtension_DynamicModule
 	FilterConfig  isTrafficExtension_FilterConfig `protobuf_oneof:"filter_config"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -523,6 +525,15 @@ func (x *TrafficExtension) GetLua() *LuaConfig {
 	return nil
 }
 
+func (x *TrafficExtension) GetDynamicModule() *DynamicModuleConfig {
+	if x != nil {
+		if x, ok := x.FilterConfig.(*TrafficExtension_DynamicModule); ok {
+			return x.DynamicModule
+		}
+	}
+	return nil
+}
+
 type isTrafficExtension_FilterConfig interface {
 	isTrafficExtension_FilterConfig()
 }
@@ -537,9 +548,16 @@ type TrafficExtension_Lua struct {
 	Lua *LuaConfig `protobuf:"bytes,7,opt,name=lua,proto3,oneof"`
 }
 
+type TrafficExtension_DynamicModule struct {
+	// DynamicModule filter configuration.
+	DynamicModule *DynamicModuleConfig `protobuf:"bytes,8,opt,name=dynamic_module,json=dynamicModule,proto3,oneof"`
+}
+
 func (*TrafficExtension_Wasm) isTrafficExtension_FilterConfig() {}
 
 func (*TrafficExtension_Lua) isTrafficExtension_FilterConfig() {}
+
+func (*TrafficExtension_DynamicModule) isTrafficExtension_FilterConfig() {}
 
 // WasmConfig configures a WebAssembly filter.
 //
@@ -736,6 +754,176 @@ func (x *WasmConfig) GetType() PluginType {
 	return PluginType_UNSPECIFIED_PLUGIN_TYPE
 }
 
+// DynamicModuleConfig configures an Envoy DynamicModule filter.
+// See the [Envoy Dynamic Modules documentation](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/dynamic_modules.html)
+// for an overview and available SDKs.
+//
+// DynamicModules are native shared libraries that must be compatible with the
+// proxy's DynamicModule ABI. See Envoy's [ABI compatibility policy](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/dynamic_modules.html#compatibility)
+// for stability guarantees and SDK version requirements.
+//
+// Example using a local shared library:
+//
+// ```yaml
+// dynamicModule:
+//
+//	url: file:///opt/filters/libmy_filter.so
+//	pluginName: my-filter
+//	pluginConfig:
+//	  key: value
+//
+// ```
+//
+// Example using a remote OCI image:
+//
+// ```yaml
+// dynamicModule:
+//
+//	url: oci://registry.example.com/filters/my-filter:v1.0.0
+//	imagePullPolicy: IfNotPresent
+//	imagePullSecret: registry-secret
+//	pluginName: my-filter
+//	pluginConfig:
+//	  key: value
+//	type: HTTP
+//
+// ```
+type DynamicModuleConfig struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// URL of a DynamicModule library or OCI container. If no scheme is present,
+	// defaults to `oci://`, referencing an OCI image. Other valid schemes
+	// are `file://` for referencing .so shared library files present locally
+	// within the proxy container, and `http[s]://` for .so shared library files
+	// hosted remotely.
+	//
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:XValidation:message="url must have schema one of [http, https, file, oci]",rule="isURL(self) ? (url(self).getScheme() in ['', 'http', 'https', 'file', 'oci']) : (isURL('http://' + self) && url('http://' + self).getScheme() in ['', 'http', 'https', 'file', 'oci'])"
+	Url string `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
+	// SHA256 checksum that will be used to verify the DynamicModule library or OCI container.
+	// If the `url` field already references a SHA256 (using the `@sha256:`
+	// notation), it must match the value of this field. If an OCI image is
+	// referenced by tag and this field is set, its checksum will be verified
+	// against the contents of this field after pulling.
+	// +kubebuilder:validation:Pattern="(^$|^[a-f0-9]{64}$)"
+	Sha256 string `protobuf:"bytes,2,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	// The pull behaviour to be applied when fetching a DynamicModule library by either
+	// OCI image or `http/https`. Only relevant when referencing a DynamicModule library without
+	// any digest, including the digest in OCI image URL or `sha256` field.
+	// Defaults to `IfNotPresent`, except when an OCI image is referenced in the `url`
+	// and the `latest` tag is used, in which case `Always` is the default,
+	// mirroring Kubernetes behaviour.
+	ImagePullPolicy PullPolicy `protobuf:"varint,3,opt,name=image_pull_policy,json=imagePullPolicy,proto3,enum=istio.extensions.v1alpha1.PullPolicy" json:"image_pull_policy,omitempty"`
+	// Credentials to use for OCI image pulling.
+	// Name of a Kubernetes Secret in the same namespace as the `TrafficExtension` that
+	// contains a Docker pull secret which is to be used to authenticate
+	// against the registry when pulling the image.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	ImagePullSecret string `protobuf:"bytes,4,opt,name=image_pull_secret,json=imagePullSecret,proto3" json:"image_pull_secret,omitempty"`
+	// $hide_from_docs
+	// Public key for verifying signed OCI images or DynamicModule.
+	// Reserved for future use; signature verification is not currently implemented.
+	VerificationKey string `protobuf:"bytes,5,opt,name=verification_key,json=verificationKey,proto3" json:"verification_key,omitempty"`
+	// The configuration passed to the filter implementation as JSON.
+	PluginConfig *_struct.Struct `protobuf:"bytes,6,opt,name=plugin_config,json=pluginConfig,proto3" json:"plugin_config,omitempty"`
+	// The name of the filter implementation within the DynamicModule library.
+	// Passed to Envoy as `filter_name` together with `plugin_config` to select
+	// and configure the filter implementation.
+	// +kubebuilder:validation:MaxLength=256
+	// +kubebuilder:validation:MinLength=1
+	PluginName string `protobuf:"bytes,7,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
+	// Specifies the type of DynamicModule extension to be used.
+	Type          PluginType `protobuf:"varint,8,opt,name=type,proto3,enum=istio.extensions.v1alpha1.PluginType" json:"type,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DynamicModuleConfig) Reset() {
+	*x = DynamicModuleConfig{}
+	mi := &file_extensions_v1alpha1_traffic_extension_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DynamicModuleConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DynamicModuleConfig) ProtoMessage() {}
+
+func (x *DynamicModuleConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_extensions_v1alpha1_traffic_extension_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DynamicModuleConfig.ProtoReflect.Descriptor instead.
+func (*DynamicModuleConfig) Descriptor() ([]byte, []int) {
+	return file_extensions_v1alpha1_traffic_extension_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *DynamicModuleConfig) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *DynamicModuleConfig) GetSha256() string {
+	if x != nil {
+		return x.Sha256
+	}
+	return ""
+}
+
+func (x *DynamicModuleConfig) GetImagePullPolicy() PullPolicy {
+	if x != nil {
+		return x.ImagePullPolicy
+	}
+	return PullPolicy_UNSPECIFIED_POLICY
+}
+
+func (x *DynamicModuleConfig) GetImagePullSecret() string {
+	if x != nil {
+		return x.ImagePullSecret
+	}
+	return ""
+}
+
+func (x *DynamicModuleConfig) GetVerificationKey() string {
+	if x != nil {
+		return x.VerificationKey
+	}
+	return ""
+}
+
+func (x *DynamicModuleConfig) GetPluginConfig() *_struct.Struct {
+	if x != nil {
+		return x.PluginConfig
+	}
+	return nil
+}
+
+func (x *DynamicModuleConfig) GetPluginName() string {
+	if x != nil {
+		return x.PluginName
+	}
+	return ""
+}
+
+func (x *DynamicModuleConfig) GetType() PluginType {
+	if x != nil {
+		return x.Type
+	}
+	return PluginType_UNSPECIFIED_PLUGIN_TYPE
+}
+
 // LuaConfig configures a Lua filter.
 //
 // Lua filters provide a lightweight alternative to WebAssembly for simple
@@ -780,7 +968,7 @@ type LuaConfig struct {
 
 func (x *LuaConfig) Reset() {
 	*x = LuaConfig{}
-	mi := &file_extensions_v1alpha1_traffic_extension_proto_msgTypes[2]
+	mi := &file_extensions_v1alpha1_traffic_extension_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -792,7 +980,7 @@ func (x *LuaConfig) String() string {
 func (*LuaConfig) ProtoMessage() {}
 
 func (x *LuaConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_extensions_v1alpha1_traffic_extension_proto_msgTypes[2]
+	mi := &file_extensions_v1alpha1_traffic_extension_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -805,7 +993,7 @@ func (x *LuaConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LuaConfig.ProtoReflect.Descriptor instead.
 func (*LuaConfig) Descriptor() ([]byte, []int) {
-	return file_extensions_v1alpha1_traffic_extension_proto_rawDescGZIP(), []int{2}
+	return file_extensions_v1alpha1_traffic_extension_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *LuaConfig) GetInlineCode() string {
@@ -843,7 +1031,7 @@ type TrafficSelector struct {
 
 func (x *TrafficSelector) Reset() {
 	*x = TrafficSelector{}
-	mi := &file_extensions_v1alpha1_traffic_extension_proto_msgTypes[3]
+	mi := &file_extensions_v1alpha1_traffic_extension_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -855,7 +1043,7 @@ func (x *TrafficSelector) String() string {
 func (*TrafficSelector) ProtoMessage() {}
 
 func (x *TrafficSelector) ProtoReflect() protoreflect.Message {
-	mi := &file_extensions_v1alpha1_traffic_extension_proto_msgTypes[3]
+	mi := &file_extensions_v1alpha1_traffic_extension_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -868,7 +1056,7 @@ func (x *TrafficSelector) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TrafficSelector.ProtoReflect.Descriptor instead.
 func (*TrafficSelector) Descriptor() ([]byte, []int) {
-	return file_extensions_v1alpha1_traffic_extension_proto_rawDescGZIP(), []int{3}
+	return file_extensions_v1alpha1_traffic_extension_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *TrafficSelector) GetMode() v1beta1.WorkloadMode {
@@ -889,7 +1077,7 @@ var File_extensions_v1alpha1_traffic_extension_proto protoreflect.FileDescriptor
 
 const file_extensions_v1alpha1_traffic_extension_proto_rawDesc = "" +
 	"\n" +
-	"+extensions/v1alpha1/traffic_extension.proto\x12\x19istio.extensions.v1alpha1\x1a\x1eextensions/v1alpha1/wasm.proto\x1a\x1fgoogle/api/field_behavior.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1egoogle/protobuf/wrappers.proto\x1a\x1btype/v1beta1/selector.proto\"\xb8\x04\n" +
+	"+extensions/v1alpha1/traffic_extension.proto\x12\x19istio.extensions.v1alpha1\x1a\x1eextensions/v1alpha1/wasm.proto\x1a\x1fgoogle/api/field_behavior.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1egoogle/protobuf/wrappers.proto\x1a\x1btype/v1beta1/selector.proto\"\x91\x05\n" +
 	"\x10TrafficExtension\x12@\n" +
 	"\bselector\x18\x01 \x01(\v2$.istio.type.v1beta1.WorkloadSelectorR\bselector\x12I\n" +
 	"\n" +
@@ -899,7 +1087,8 @@ const file_extensions_v1alpha1_traffic_extension_proto_rawDesc = "" +
 	"\bpriority\x18\x04 \x01(\v2\x1b.google.protobuf.Int32ValueR\bpriority\x12@\n" +
 	"\x05match\x18\x05 \x03(\v2*.istio.extensions.v1alpha1.TrafficSelectorR\x05match\x12;\n" +
 	"\x04wasm\x18\x06 \x01(\v2%.istio.extensions.v1alpha1.WasmConfigH\x00R\x04wasm\x128\n" +
-	"\x03lua\x18\a \x01(\v2$.istio.extensions.v1alpha1.LuaConfigH\x00R\x03lua\"B\n" +
+	"\x03lua\x18\a \x01(\v2$.istio.extensions.v1alpha1.LuaConfigH\x00R\x03lua\x12W\n" +
+	"\x0edynamic_module\x18\b \x01(\v2..istio.extensions.v1alpha1.DynamicModuleConfigH\x00R\rdynamicModule\"B\n" +
 	"\x0eExecutionPhase\x12\x0f\n" +
 	"\vUNSPECIFIED\x10\x00\x12\t\n" +
 	"\x05AUTHN\x10\x01\x12\t\n" +
@@ -919,7 +1108,17 @@ const file_extensions_v1alpha1_traffic_extension_proto_rawDesc = "" +
 	"\rfail_strategy\x18\b \x01(\x0e2'.istio.extensions.v1alpha1.FailStrategyR\ffailStrategy\x12@\n" +
 	"\tvm_config\x18\t \x01(\v2#.istio.extensions.v1alpha1.VmConfigR\bvmConfig\x129\n" +
 	"\x04type\x18\n" +
-	" \x01(\x0e2%.istio.extensions.v1alpha1.PluginTypeR\x04type\"2\n" +
+	" \x01(\x0e2%.istio.extensions.v1alpha1.PluginTypeR\x04type\"\x89\x03\n" +
+	"\x13DynamicModuleConfig\x12\x16\n" +
+	"\x03url\x18\x01 \x01(\tB\x04\xe2A\x01\x02R\x03url\x12\x16\n" +
+	"\x06sha256\x18\x02 \x01(\tR\x06sha256\x12Q\n" +
+	"\x11image_pull_policy\x18\x03 \x01(\x0e2%.istio.extensions.v1alpha1.PullPolicyR\x0fimagePullPolicy\x12*\n" +
+	"\x11image_pull_secret\x18\x04 \x01(\tR\x0fimagePullSecret\x12)\n" +
+	"\x10verification_key\x18\x05 \x01(\tR\x0fverificationKey\x12<\n" +
+	"\rplugin_config\x18\x06 \x01(\v2\x17.google.protobuf.StructR\fpluginConfig\x12\x1f\n" +
+	"\vplugin_name\x18\a \x01(\tR\n" +
+	"pluginName\x129\n" +
+	"\x04type\x18\b \x01(\x0e2%.istio.extensions.v1alpha1.PluginTypeR\x04type\"2\n" +
 	"\tLuaConfig\x12%\n" +
 	"\vinline_code\x18\x01 \x01(\tB\x04\xe2A\x01\x02R\n" +
 	"inlineCode\"\x7f\n" +
@@ -940,44 +1139,49 @@ func file_extensions_v1alpha1_traffic_extension_proto_rawDescGZIP() []byte {
 }
 
 var file_extensions_v1alpha1_traffic_extension_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_extensions_v1alpha1_traffic_extension_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_extensions_v1alpha1_traffic_extension_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_extensions_v1alpha1_traffic_extension_proto_goTypes = []any{
 	(TrafficExtension_ExecutionPhase)(0),  // 0: istio.extensions.v1alpha1.TrafficExtension.ExecutionPhase
 	(*TrafficExtension)(nil),              // 1: istio.extensions.v1alpha1.TrafficExtension
 	(*WasmConfig)(nil),                    // 2: istio.extensions.v1alpha1.WasmConfig
-	(*LuaConfig)(nil),                     // 3: istio.extensions.v1alpha1.LuaConfig
-	(*TrafficSelector)(nil),               // 4: istio.extensions.v1alpha1.TrafficSelector
-	(*v1beta1.WorkloadSelector)(nil),      // 5: istio.type.v1beta1.WorkloadSelector
-	(*v1beta1.PolicyTargetReference)(nil), // 6: istio.type.v1beta1.PolicyTargetReference
-	(*wrappers.Int32Value)(nil),           // 7: google.protobuf.Int32Value
-	(PullPolicy)(0),                       // 8: istio.extensions.v1alpha1.PullPolicy
-	(*_struct.Struct)(nil),                // 9: google.protobuf.Struct
-	(FailStrategy)(0),                     // 10: istio.extensions.v1alpha1.FailStrategy
-	(*VmConfig)(nil),                      // 11: istio.extensions.v1alpha1.VmConfig
-	(PluginType)(0),                       // 12: istio.extensions.v1alpha1.PluginType
-	(v1beta1.WorkloadMode)(0),             // 13: istio.type.v1beta1.WorkloadMode
-	(*v1beta1.PortSelector)(nil),          // 14: istio.type.v1beta1.PortSelector
+	(*DynamicModuleConfig)(nil),           // 3: istio.extensions.v1alpha1.DynamicModuleConfig
+	(*LuaConfig)(nil),                     // 4: istio.extensions.v1alpha1.LuaConfig
+	(*TrafficSelector)(nil),               // 5: istio.extensions.v1alpha1.TrafficSelector
+	(*v1beta1.WorkloadSelector)(nil),      // 6: istio.type.v1beta1.WorkloadSelector
+	(*v1beta1.PolicyTargetReference)(nil), // 7: istio.type.v1beta1.PolicyTargetReference
+	(*wrappers.Int32Value)(nil),           // 8: google.protobuf.Int32Value
+	(PullPolicy)(0),                       // 9: istio.extensions.v1alpha1.PullPolicy
+	(*_struct.Struct)(nil),                // 10: google.protobuf.Struct
+	(FailStrategy)(0),                     // 11: istio.extensions.v1alpha1.FailStrategy
+	(*VmConfig)(nil),                      // 12: istio.extensions.v1alpha1.VmConfig
+	(PluginType)(0),                       // 13: istio.extensions.v1alpha1.PluginType
+	(v1beta1.WorkloadMode)(0),             // 14: istio.type.v1beta1.WorkloadMode
+	(*v1beta1.PortSelector)(nil),          // 15: istio.type.v1beta1.PortSelector
 }
 var file_extensions_v1alpha1_traffic_extension_proto_depIdxs = []int32{
-	5,  // 0: istio.extensions.v1alpha1.TrafficExtension.selector:type_name -> istio.type.v1beta1.WorkloadSelector
-	6,  // 1: istio.extensions.v1alpha1.TrafficExtension.targetRefs:type_name -> istio.type.v1beta1.PolicyTargetReference
+	6,  // 0: istio.extensions.v1alpha1.TrafficExtension.selector:type_name -> istio.type.v1beta1.WorkloadSelector
+	7,  // 1: istio.extensions.v1alpha1.TrafficExtension.targetRefs:type_name -> istio.type.v1beta1.PolicyTargetReference
 	0,  // 2: istio.extensions.v1alpha1.TrafficExtension.phase:type_name -> istio.extensions.v1alpha1.TrafficExtension.ExecutionPhase
-	7,  // 3: istio.extensions.v1alpha1.TrafficExtension.priority:type_name -> google.protobuf.Int32Value
-	4,  // 4: istio.extensions.v1alpha1.TrafficExtension.match:type_name -> istio.extensions.v1alpha1.TrafficSelector
+	8,  // 3: istio.extensions.v1alpha1.TrafficExtension.priority:type_name -> google.protobuf.Int32Value
+	5,  // 4: istio.extensions.v1alpha1.TrafficExtension.match:type_name -> istio.extensions.v1alpha1.TrafficSelector
 	2,  // 5: istio.extensions.v1alpha1.TrafficExtension.wasm:type_name -> istio.extensions.v1alpha1.WasmConfig
-	3,  // 6: istio.extensions.v1alpha1.TrafficExtension.lua:type_name -> istio.extensions.v1alpha1.LuaConfig
-	8,  // 7: istio.extensions.v1alpha1.WasmConfig.image_pull_policy:type_name -> istio.extensions.v1alpha1.PullPolicy
-	9,  // 8: istio.extensions.v1alpha1.WasmConfig.plugin_config:type_name -> google.protobuf.Struct
-	10, // 9: istio.extensions.v1alpha1.WasmConfig.fail_strategy:type_name -> istio.extensions.v1alpha1.FailStrategy
-	11, // 10: istio.extensions.v1alpha1.WasmConfig.vm_config:type_name -> istio.extensions.v1alpha1.VmConfig
-	12, // 11: istio.extensions.v1alpha1.WasmConfig.type:type_name -> istio.extensions.v1alpha1.PluginType
-	13, // 12: istio.extensions.v1alpha1.TrafficSelector.mode:type_name -> istio.type.v1beta1.WorkloadMode
-	14, // 13: istio.extensions.v1alpha1.TrafficSelector.ports:type_name -> istio.type.v1beta1.PortSelector
-	14, // [14:14] is the sub-list for method output_type
-	14, // [14:14] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	4,  // 6: istio.extensions.v1alpha1.TrafficExtension.lua:type_name -> istio.extensions.v1alpha1.LuaConfig
+	3,  // 7: istio.extensions.v1alpha1.TrafficExtension.dynamic_module:type_name -> istio.extensions.v1alpha1.DynamicModuleConfig
+	9,  // 8: istio.extensions.v1alpha1.WasmConfig.image_pull_policy:type_name -> istio.extensions.v1alpha1.PullPolicy
+	10, // 9: istio.extensions.v1alpha1.WasmConfig.plugin_config:type_name -> google.protobuf.Struct
+	11, // 10: istio.extensions.v1alpha1.WasmConfig.fail_strategy:type_name -> istio.extensions.v1alpha1.FailStrategy
+	12, // 11: istio.extensions.v1alpha1.WasmConfig.vm_config:type_name -> istio.extensions.v1alpha1.VmConfig
+	13, // 12: istio.extensions.v1alpha1.WasmConfig.type:type_name -> istio.extensions.v1alpha1.PluginType
+	9,  // 13: istio.extensions.v1alpha1.DynamicModuleConfig.image_pull_policy:type_name -> istio.extensions.v1alpha1.PullPolicy
+	10, // 14: istio.extensions.v1alpha1.DynamicModuleConfig.plugin_config:type_name -> google.protobuf.Struct
+	13, // 15: istio.extensions.v1alpha1.DynamicModuleConfig.type:type_name -> istio.extensions.v1alpha1.PluginType
+	14, // 16: istio.extensions.v1alpha1.TrafficSelector.mode:type_name -> istio.type.v1beta1.WorkloadMode
+	15, // 17: istio.extensions.v1alpha1.TrafficSelector.ports:type_name -> istio.type.v1beta1.PortSelector
+	18, // [18:18] is the sub-list for method output_type
+	18, // [18:18] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_extensions_v1alpha1_traffic_extension_proto_init() }
@@ -989,6 +1193,7 @@ func file_extensions_v1alpha1_traffic_extension_proto_init() {
 	file_extensions_v1alpha1_traffic_extension_proto_msgTypes[0].OneofWrappers = []any{
 		(*TrafficExtension_Wasm)(nil),
 		(*TrafficExtension_Lua)(nil),
+		(*TrafficExtension_DynamicModule)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -996,7 +1201,7 @@ func file_extensions_v1alpha1_traffic_extension_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_extensions_v1alpha1_traffic_extension_proto_rawDesc), len(file_extensions_v1alpha1_traffic_extension_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   4,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

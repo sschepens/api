@@ -1,0 +1,210 @@
+apiVersion: "extensions.istio.io/v1alpha1"
+kind: "TrafficExtension"
+metadata:
+  name: "local"
+spec:
+  dynamicModule:
+    url: "file:///opt/filters/libfilter.so"
+    pluginName: "my-filter"
+    pluginConfig:
+      nested:
+        values: [1, true, "x"]
+      custom: "value"
+---
+apiVersion: "extensions.istio.io/v1alpha1"
+kind: "TrafficExtension"
+metadata:
+  name: "http"
+spec:
+  dynamicModule:
+    url: "http://example.com/filter.so"
+    pluginName: "my-filter"
+    pluginConfig:
+      nested:
+        values: [1, true, "x"]
+      custom: "value"
+---
+apiVersion: "extensions.istio.io/v1alpha1"
+kind: "TrafficExtension"
+metadata:
+  name: "https"
+spec:
+  dynamicModule:
+    url: "https://example.com/filter.so"
+    pluginName: "my-filter"
+    pluginConfig:
+      nested:
+        values: [1, true, "x"]
+      custom: "value"
+---
+apiVersion: "extensions.istio.io/v1alpha1"
+kind: "TrafficExtension"
+metadata:
+  name: "oci"
+spec:
+  dynamicModule:
+    url: "oci://registry.example.com/filter:v1"
+    pluginName: "my-filter"
+    pluginConfig:
+      nested:
+        values: [1, true, "x"]
+      custom: "value"
+---
+apiVersion: "extensions.istio.io/v1alpha1"
+kind: "TrafficExtension"
+metadata:
+  name: "schemeless"
+spec:
+  dynamicModule:
+    url: "registry.example.com/filter:v1"
+    pluginName: "my-filter"
+    pluginConfig:
+      nested:
+        values: [1, true, "x"]
+      custom: "value"
+---
+apiVersion: "extensions.istio.io/v1alpha1"
+kind: "TrafficExtension"
+metadata:
+  name: "all-fields"
+spec:
+  dynamicModule:
+    url: "file:///opt/filters/libfilter.so"
+    pluginName: "my-filter"
+    sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    imagePullPolicy: "Always"
+    imagePullSecret: "registry-secret"
+    verificationKey: "future-key"
+    type: "NETWORK"
+---
+apiVersion: "extensions.istio.io/v1alpha1"
+kind: "TrafficExtension"
+metadata:
+  name: "wasm"
+spec:
+  wasm:
+    url: "file:///filter.wasm"
+---
+apiVersion: "extensions.istio.io/v1alpha1"
+kind: "TrafficExtension"
+metadata:
+  name: "lua"
+spec:
+  lua:
+    inlineCode: "function envoy_on_request(h) end"
+---
+apiVersion: "extensions.istio.io/v1alpha1"
+kind: "TrafficExtension"
+metadata:
+  name: "missing-filter"
+spec: {}
+_err: "exactly one of wasm, lua or dynamicModule must be set"
+---
+apiVersion: "extensions.istio.io/v1alpha1"
+kind: "TrafficExtension"
+metadata:
+  name: "multiple-wasm"
+spec:
+  wasm:
+    url: "file:///filter.wasm"
+  dynamicModule:
+    url: "file:///opt/filters/libfilter.so"
+    pluginName: "my-filter"
+_err: "must validate one and only one schema"
+---
+apiVersion: "extensions.istio.io/v1alpha1"
+kind: "TrafficExtension"
+metadata:
+  name: "multiple-lua"
+spec:
+  lua:
+    inlineCode: "function envoy_on_request(h) end"
+  dynamicModule:
+    url: "file:///opt/filters/libfilter.so"
+    pluginName: "my-filter"
+_err: "must validate one and only one schema"
+---
+apiVersion: "extensions.istio.io/v1alpha1"
+kind: "TrafficExtension"
+metadata:
+  name: "multiple-both"
+spec:
+  wasm:
+    url: "file:///filter.wasm"
+  lua:
+    inlineCode: "function envoy_on_request(h) end"
+  dynamicModule:
+    url: "file:///opt/filters/libfilter.so"
+    pluginName: "my-filter"
+_err: "must validate one and only one schema"
+---
+apiVersion: "extensions.istio.io/v1alpha1"
+kind: "TrafficExtension"
+metadata:
+  name: "wasm-and-lua"
+spec:
+  wasm:
+    url: "file:///filter.wasm"
+  lua:
+    inlineCode: "function envoy_on_request(h) end"
+_err: "must validate one and only one schema"
+---
+apiVersion: "extensions.istio.io/v1alpha1"
+kind: "TrafficExtension"
+metadata:
+  name: "missing-url"
+spec:
+  dynamicModule: {}
+_err: "Required value"
+---
+apiVersion: "extensions.istio.io/v1alpha1"
+kind: "TrafficExtension"
+metadata:
+  name: "empty-url"
+spec:
+  dynamicModule:
+    url: ""
+_err: "at least 1"
+---
+apiVersion: "extensions.istio.io/v1alpha1"
+kind: "TrafficExtension"
+metadata:
+  name: "invalid-scheme"
+spec:
+  dynamicModule:
+    url: "ftp://example.com/filter.so"
+_err: "url must have schema"
+---
+apiVersion: "extensions.istio.io/v1alpha1"
+kind: "TrafficExtension"
+metadata:
+  name: "bad-digest"
+spec:
+  dynamicModule:
+    url: "file:///opt/filters/libfilter.so"
+    pluginName: "my-filter"
+    sha256: "abc"
+_err: "should match"
+---
+apiVersion: "extensions.istio.io/v1alpha1"
+kind: "TrafficExtension"
+metadata:
+  name: "fail-strategy"
+spec:
+  dynamicModule:
+    url: "file:///opt/filters/libfilter.so"
+    pluginName: "my-filter"
+    failStrategy: "FAIL_RELOAD"
+_err: "unknown fields"
+---
+apiVersion: "extensions.istio.io/v1alpha1"
+kind: "TrafficExtension"
+metadata:
+  name: "vm-config"
+spec:
+  dynamicModule:
+    url: "file:///opt/filters/libfilter.so"
+    pluginName: "my-filter"
+    vmConfig:
+      env: []
+_err: "unknown fields"
